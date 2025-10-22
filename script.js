@@ -19,8 +19,16 @@ class WantToCryDecryptor {
         // ID único encontrado no ransomware
         this.uniqueID = '3C579D75CF2341758A9B984A0B943F18';
         this.toxID = '1D9E589C757304F688514280E3ADBE2E12C5F46DE25A01EBBAAB17896D0BAA59BFCEE0D493A6';
+        
+        // Inicializar biblioteca de criptografia moderna
+        this.modernCrypto = new ModernCrypto();
+        this.modernCrypto.setLogCallback((message, type) => {
+            this.logMessage(message, type);
+        });
+        
         this.initializeEventListeners();
-        this.logMessage('Sistema iniciado - Ferramenta WantToCry Decryptor carregada', 'info');
+        this.logMessage('🚀 Sistema iniciado com criptografia moderna', 'success');
+        this.logMessage(`📡 WebCrypto suportado: ${this.modernCrypto.isWebCryptoSupported ? 'Sim' : 'Não'}`, 'info');
     }
 
     initializeEventListeners() {
@@ -816,6 +824,42 @@ class WantToCryDecryptor {
     }
 
     async performAESDecryption(encryptedData, keyBytes, mode) {
+        try {
+            this.logMessage(`🔐 Iniciando descriptografia AES-${mode} com biblioteca moderna`, 'info');
+            
+            // Converter dados para hex
+            const encryptedHex = Array.from(encryptedData).map(b => b.toString(16).padStart(2, '0')).join('');
+            const keyHex = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            this.logMessage(`📊 Dados: ${encryptedHex.length} chars hex, Chave: ${keyHex.length} chars hex`, 'info');
+            
+            // Usar a biblioteca moderna de criptografia
+            const result = await this.modernCrypto.decrypt(encryptedHex, keyHex, `AES-${mode}`);
+            
+            if (result && result.length > 0) {
+                this.logMessage(`✅ Descriptografia AES-${mode} bem-sucedida: ${result.length} bytes`, 'success');
+                
+                // Validar dados descriptografados
+                if (this.modernCrypto.validateDecryptedData(result)) {
+                    return result;
+                } else {
+                    this.logMessage('⚠️ Dados descriptografados podem estar corrompidos', 'warning');
+                    return result; // Retornar mesmo assim para análise
+                }
+            } else {
+                throw new Error('Descriptografia resultou em dados vazios');
+            }
+            
+        } catch (error) {
+            this.logMessage(`❌ Erro na descriptografia AES-${mode}: ${error.message}`, 'error');
+            
+            // Fallback para método antigo se necessário
+            this.logMessage('🔄 Tentando método de descriptografia legado...', 'warning');
+            return this.performLegacyAESDecryption(encryptedData, keyBytes, mode);
+        }
+    }
+
+    async performLegacyAESDecryption(encryptedData, keyBytes, mode) {
         try {
             // Verificar se crypto-js está disponível
             if (typeof CryptoJS === 'undefined') {
