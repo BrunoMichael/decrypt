@@ -1303,6 +1303,9 @@ class WantToCryDecryptor {
         
         logsContainer.appendChild(logEntry);
         logsContainer.scrollTop = logsContainer.scrollHeight;
+        
+        // Também exibir no console do navegador para debug
+        console.log(`[${timestamp}] ${message}`);
     }
 
     sleep(ms) {
