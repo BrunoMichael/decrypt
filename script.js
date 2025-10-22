@@ -1343,7 +1343,7 @@ class WantToCryDecryptor {
                 this.logMessage(`⚠️ Header ${extension.toUpperCase()} inválido. Esperado: [${expectedHeader.join(',')}], Encontrado: [${currentHeader.join(',')}]`, 'warning');
                 this.logMessage(`🔧 Tentando corrigir header do ${extension.toUpperCase()}...`, 'info');
                 
-                // Tentar encontrar o header correto no arquivo
+                // Primeiro, tentar encontrar o header correto no arquivo
                 const headerFound = this.findCorrectHeader(correctedData, expectedHeader);
                 
                 if (headerFound.found) {
@@ -1351,29 +1351,13 @@ class WantToCryDecryptor {
                     this.logMessage(`✅ Header encontrado na posição ${headerFound.position}`, 'success');
                     correctedData = correctedData.slice(headerFound.position);
                 } else {
-                    // Se não encontrou, tentar corrigir o início do arquivo
-                    this.logMessage('🔧 Aplicando correção de header...', 'info');
-                    
-                    // Criar novo array com header correto
-                    const newData = new Uint8Array(correctedData.length);
-                    
-                    // Definir header correto
-                    expectedHeader.forEach((byte, index) => {
-                        if (index < newData.length) {
-                            newData[index] = byte;
-                        }
-                    });
-                    
-                    // Copiar resto dos dados (pulando possível header corrompido)
-                    const startPos = Math.min(expectedHeader.length, 16); // Pular até 16 bytes iniciais
-                    for (let i = startPos; i < correctedData.length; i++) {
-                        if (expectedHeader.length + (i - startPos) < newData.length) {
-                            newData[expectedHeader.length + (i - startPos)] = correctedData[i];
-                        }
+                    // Estratégia específica para PDFs
+                    if (extension === 'pdf') {
+                        correctedData = this.fixPDFSpecific(correctedData);
+                    } else {
+                        // Para outros tipos, aplicar correção genérica
+                        correctedData = this.applyGenericHeaderFix(correctedData, expectedHeader);
                     }
-                    
-                    correctedData = newData;
-                    this.logMessage(`✅ Header ${extension.toUpperCase()} corrigido`, 'success');
                 }
             } else {
                 this.logMessage(`✅ Header ${extension.toUpperCase()} já está correto`, 'success');
@@ -1403,6 +1387,78 @@ class WantToCryDecryptor {
         }
         
         return { found: false, position: -1 };
+    }
+
+    // Correção específica para arquivos PDF
+    fixPDFSpecific(data) {
+        this.logMessage('🔧 Aplicando correção específica para PDF...', 'info');
+        
+        // Procurar por padrões PDF no arquivo
+        const pdfPatterns = [
+            [0x25, 0x50, 0x44, 0x46], // %PDF
+            [0x50, 0x44, 0x46],       // PDF (sem %)
+        ];
+        
+        // Procurar por strings PDF no arquivo
+        const dataView = new Uint8Array(data);
+        const searchLimit = Math.min(1024, dataView.length); // Procurar nos primeiros 1KB
+        
+        // Procurar por "%PDF" como string
+        for (let i = 0; i < searchLimit - 4; i++) {
+            if (dataView[i] === 0x25 && dataView[i+1] === 0x50 && 
+                dataView[i+2] === 0x44 && dataView[i+3] === 0x46) {
+                this.logMessage(`✅ Header PDF encontrado na posição ${i}`, 'success');
+                return dataView.slice(i);
+            }
+        }
+        
+        // Se não encontrou, tentar reconstruir o PDF
+        this.logMessage('🔧 Reconstruindo header PDF...', 'info');
+        
+        // Criar novo array com header PDF correto
+        const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34]); // %PDF-1.4
+        const newData = new Uint8Array(pdfHeader.length + dataView.length);
+        
+        // Copiar header
+        newData.set(pdfHeader, 0);
+        
+        // Copiar dados originais (pulando possível header corrompido)
+        let startPos = 0;
+        // Se os primeiros bytes parecem ser lixo, pular alguns bytes
+        if (dataView[0] !== 0x25 && dataView[0] !== 0x50) {
+            startPos = Math.min(16, dataView.length);
+        }
+        
+        newData.set(dataView.slice(startPos), pdfHeader.length);
+        
+        this.logMessage('✅ Header PDF reconstruído', 'success');
+        return newData;
+    }
+
+    // Correção genérica para outros tipos de arquivo
+    applyGenericHeaderFix(data, expectedHeader) {
+        this.logMessage('🔧 Aplicando correção genérica de header...', 'info');
+        
+        // Criar novo array com header correto
+        const newData = new Uint8Array(data.length);
+        
+        // Definir header correto
+        expectedHeader.forEach((byte, index) => {
+            if (index < newData.length) {
+                newData[index] = byte;
+            }
+        });
+        
+        // Copiar resto dos dados (pulando possível header corrompido)
+        const startPos = Math.min(expectedHeader.length, 16); // Pular até 16 bytes iniciais
+        for (let i = startPos; i < data.length; i++) {
+            if (expectedHeader.length + (i - startPos) < newData.length) {
+                newData[expectedHeader.length + (i - startPos)] = data[i];
+            }
+        }
+        
+        this.logMessage('✅ Header genérico corrigido', 'success');
+        return newData;
     }
 }
 
