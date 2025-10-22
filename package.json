@@ -1,12 +1,16 @@
 {
   "name": "wanttocry-decryptor",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry",
   "main": "start.js",
   "scripts": {
     "start": "node start.js",
     "dev": "node start.js",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "echo \"No tests specified\" && exit 0",
+    "version-patch": "node version-bump.js patch",
+    "version-minor": "node version-bump.js minor",
+    "version-major": "node version-bump.js major",
+    "commit": "npm run version-patch && git add . && git commit -m \"v$(node -p \"require('./package.json').version\"): Atualização automática\""
   },
   "keywords": [
     "decryption",

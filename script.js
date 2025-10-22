@@ -1534,43 +1534,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Adicionar informações sobre o ransomware
 document.addEventListener('DOMContentLoaded', () => {
-    const infoSection = document.createElement('div');
-    infoSection.className = 'info-section';
-    infoSection.style.cssText = `
-        background: rgba(255, 255, 255, 0.95);
-        padding: 25px;
-        border-radius: 15px;
-        margin: 20px 0;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    `;
-    
-    infoSection.innerHTML = `
-        <h2><i class="fas fa-info-circle"></i> Sobre o WantToCry Ransomware</h2>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-            <div>
-                <h3>Características:</h3>
-                <ul style="line-height: 1.8;">
-                    <li>Extensão: .want_to_cry</li>
-                    <li>Algoritmo: Provavelmente AES-256</li>
-                    <li>Contato: qTox Messenger</li>
-                    <li>Valor do resgate: $600 USD</li>
-                </ul>
-            </div>
-            <div>
-                <h3>Métodos de Recuperação:</h3>
-                <ul style="line-height: 1.8;">
-                    <li>Chaves fracas ou reutilizadas</li>
-                    <li>Falhas na implementação</li>
-                    <li>Backups não criptografados</li>
-                    <li>Shadow copies do Windows</li>
-                </ul>
-            </div>
-        </div>
-        <div class="warning-box" style="margin-top: 20px;">
-            <i class="fas fa-exclamation-triangle"></i>
-            <strong>IMPORTANTE:</strong> Esta ferramenta é experimental. Sempre mantenha backups e nunca pague resgates!
-        </div>
-    `;
-    
-    document.querySelector('.main-content').appendChild(infoSection);
+    // Seção "Sobre o WantToCry" removida conforme solicitado
 });
