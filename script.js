@@ -38,7 +38,15 @@ class WantToCryDecryptor {
 
         uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
         uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
-        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // Adicionar click listener apenas na área de upload, não no input
+        uploadArea.addEventListener('click', (e) => {
+            // Evitar dupla chamada se o clique foi diretamente no input
+            if (e.target !== fileInput) {
+                fileInput.click();
+            }
+        });
+        
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
 
         // Remover listeners antigos que não existem mais
