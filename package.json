@@ -1,0 +1,31 @@
+{
+  "name": "wanttocry-decryptor",
+  "version": "1.0.0",
+  "description": "Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry",
+  "main": "start.js",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node start.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "decryption",
+    "ransomware",
+    "security",
+    "crypto",
+    "wanttocry"
+  ],
+  "author": "Bruno Michael",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BrunoMichael/decrypt.git"
+  },
+  "homepage": "https://github.com/BrunoMichael/decrypt#readme"
+}

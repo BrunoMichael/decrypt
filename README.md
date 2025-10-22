@@ -1,11 +1,31 @@
-# WantToCry Decryptor - Ferramenta de Descriptografia
+# WantToCry Decryptor
 
-## ⚠️ AVISO IMPORTANTE
-**NUNCA PAGUE RESGATES A CRIMINOSOS!** Esta ferramenta foi desenvolvida para tentar recuperar arquivos criptografados pelo ransomware WantToCry usando métodos legítimos de análise e descriptografia.
+Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry
 
-## 🎯 Sobre o Projeto
+## 🚀 Deploy no Square Cloud
 
-Esta é uma ferramenta web gratuita e de código aberto desenvolvida para ajudar vítimas do ransomware WantToCry a recuperar seus arquivos sem pagar o resgate. A ferramenta utiliza várias técnicas de análise criptográfica e tentativas de descriptografia.
+### Arquivos de Configuração Incluídos:
+- `start.js` - Servidor Express para produção
+- `package.json` - Dependências do Node.js
+- `squarecloud.config` - Configuração específica do Square Cloud
+
+### Como fazer deploy:
+
+1. **Preparar arquivos**:
+   ```bash
+   npm install
+   ```
+
+2. **Fazer upload no Square Cloud**:
+   - Compacte todos os arquivos em um ZIP
+   - Faça upload no painel do Square Cloud
+   - A aplicação será iniciada automaticamente
+
+3. **Configurações do Square Cloud**:
+   - **Arquivo principal**: `start.js`
+   - **Memória**: 512MB
+   - **Versão Node.js**: Recomendada
+   - **Auto-restart**: Habilitado
 
 ## 🔍 Características do WantToCry Ransomware
 
