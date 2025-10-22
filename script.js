@@ -1176,39 +1176,22 @@ class WantToCryDecryptor {
                 return;
             }
 
-            // Log da assinatura do arquivo
-            const signature = this.getFileSignature(fileData.decryptedContent);
-            this.logMessage(`📄 Assinatura detectada: ${signature}`, 'info');
+            // Log da assinatura do arquivo original
+            const originalSignature = this.getFileSignature(fileData.decryptedContent);
+            this.logMessage(`📄 Assinatura original detectada: ${originalSignature}`, 'info');
 
-            // Verificar se é um PDF e validar header
-            if (originalName.toLowerCase().endsWith('.pdf')) {
-                const pdfHeader = Array.from(fileData.decryptedContent.slice(0, 4));
-                const expectedPDF = [0x25, 0x50, 0x44, 0x46]; // %PDF
-                
-                if (JSON.stringify(pdfHeader) !== JSON.stringify(expectedPDF)) {
-                    this.logMessage(`⚠️ Header PDF inválido. Esperado: [37,80,68,70], Encontrado: [${pdfHeader.join(',')}]`, 'warning');
-                    this.logMessage('🔧 Tentando corrigir header do PDF...', 'info');
-                    
-                    // Tentar corrigir o header do PDF
-                    const correctedData = new Uint8Array(fileData.decryptedContent.length);
-                    correctedData.set(fileData.decryptedContent);
-                    
-                    // Definir header correto do PDF
-                    correctedData[0] = 0x25; // %
-                    correctedData[1] = 0x50; // P
-                    correctedData[2] = 0x44; // D
-                    correctedData[3] = 0x46; // F
-                    
-                    fileData.decryptedContent = correctedData;
-                    this.logMessage('✅ Header PDF corrigido', 'success');
-                }
-            }
-
-            // Criar blob com os dados descriptografados
+            // Aplicar correções específicas por tipo de arquivo
+            let correctedData = this.fixFileHeaders(fileData.decryptedContent, originalName);
+            
+            // Log da assinatura após correção
+            const correctedSignature = this.getFileSignature(correctedData);
+            this.logMessage(`📄 Assinatura após correção: ${correctedSignature}`, 'info');
+            
+            // Criar blob com os dados corrigidos
             const mimeType = this.getMimeType(originalName);
             this.logMessage(`📋 MIME Type: ${mimeType}`, 'info');
             
-            const blob = new Blob([fileData.decryptedContent], { 
+            const blob = new Blob([correctedData], { 
                 type: mimeType 
             });
 
@@ -1324,6 +1307,102 @@ class WantToCryDecryptor {
 
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    fixFileHeaders(data, filename) {
+        const extension = filename.toLowerCase().split('.').pop();
+        let correctedData = new Uint8Array(data);
+        
+        // Definir headers corretos para diferentes tipos de arquivo
+        const fileHeaders = {
+            'pdf': [0x25, 0x50, 0x44, 0x46], // %PDF
+            'xlsx': [0x50, 0x4B, 0x03, 0x04], // ZIP (Excel é baseado em ZIP)
+            'docx': [0x50, 0x4B, 0x03, 0x04], // ZIP (Word é baseado em ZIP)
+            'pptx': [0x50, 0x4B, 0x03, 0x04], // ZIP (PowerPoint é baseado em ZIP)
+            'zip': [0x50, 0x4B, 0x03, 0x04],  // ZIP
+            'png': [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], // PNG
+            'jpg': [0xFF, 0xD8, 0xFF], // JPEG
+            'jpeg': [0xFF, 0xD8, 0xFF], // JPEG
+            'gif': [0x47, 0x49, 0x46, 0x38], // GIF
+            'bmp': [0x42, 0x4D], // BMP
+            'doc': [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], // MS Office (antigo)
+            'xls': [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], // MS Office (antigo)
+            'ppt': [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]  // MS Office (antigo)
+        };
+
+        if (fileHeaders[extension]) {
+            const expectedHeader = fileHeaders[extension];
+            const currentHeader = Array.from(correctedData.slice(0, expectedHeader.length));
+            
+            // Verificar se o header está correto
+            const headerMatches = expectedHeader.every((byte, index) => 
+                index < currentHeader.length && currentHeader[index] === byte
+            );
+            
+            if (!headerMatches) {
+                this.logMessage(`⚠️ Header ${extension.toUpperCase()} inválido. Esperado: [${expectedHeader.join(',')}], Encontrado: [${currentHeader.join(',')}]`, 'warning');
+                this.logMessage(`🔧 Tentando corrigir header do ${extension.toUpperCase()}...`, 'info');
+                
+                // Tentar encontrar o header correto no arquivo
+                const headerFound = this.findCorrectHeader(correctedData, expectedHeader);
+                
+                if (headerFound.found) {
+                    // Se encontrou o header em outra posição, extrair dados a partir dali
+                    this.logMessage(`✅ Header encontrado na posição ${headerFound.position}`, 'success');
+                    correctedData = correctedData.slice(headerFound.position);
+                } else {
+                    // Se não encontrou, tentar corrigir o início do arquivo
+                    this.logMessage('🔧 Aplicando correção de header...', 'info');
+                    
+                    // Criar novo array com header correto
+                    const newData = new Uint8Array(correctedData.length);
+                    
+                    // Definir header correto
+                    expectedHeader.forEach((byte, index) => {
+                        if (index < newData.length) {
+                            newData[index] = byte;
+                        }
+                    });
+                    
+                    // Copiar resto dos dados (pulando possível header corrompido)
+                    const startPos = Math.min(expectedHeader.length, 16); // Pular até 16 bytes iniciais
+                    for (let i = startPos; i < correctedData.length; i++) {
+                        if (expectedHeader.length + (i - startPos) < newData.length) {
+                            newData[expectedHeader.length + (i - startPos)] = correctedData[i];
+                        }
+                    }
+                    
+                    correctedData = newData;
+                    this.logMessage(`✅ Header ${extension.toUpperCase()} corrigido`, 'success');
+                }
+            } else {
+                this.logMessage(`✅ Header ${extension.toUpperCase()} já está correto`, 'success');
+            }
+        } else {
+            this.logMessage(`ℹ️ Tipo de arquivo ${extension.toUpperCase()} não requer correção de header específica`, 'info');
+        }
+        
+        return correctedData;
+    }
+
+    findCorrectHeader(data, expectedHeader) {
+        // Procurar o header correto nos primeiros 1KB do arquivo
+        const searchLimit = Math.min(1024, data.length - expectedHeader.length);
+        
+        for (let i = 0; i <= searchLimit; i++) {
+            let matches = true;
+            for (let j = 0; j < expectedHeader.length; j++) {
+                if (data[i + j] !== expectedHeader[j]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                return { found: true, position: i };
+            }
+        }
+        
+        return { found: false, position: -1 };
     }
 }
 
