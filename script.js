@@ -497,6 +497,13 @@ class WantToCryDecryptor {
                             });
                             
                             this.displayDecryptionResult(result);
+                            
+                            // INICIAR DOWNLOAD AUTOMATICAMENTE
+                            this.logMessage(`🚀 Iniciando download automático do arquivo descriptografado...`, 'success');
+                            setTimeout(() => {
+                                this.downloadDecryptedFiles();
+                            }, 1000);
+                            
                             this.isProcessing = false;
                             return;
                         }

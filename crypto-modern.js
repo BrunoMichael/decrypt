@@ -266,26 +266,48 @@ class ModernCrypto {
         }
 
         // Verificar assinatura de arquivo comum
-        const signature = Array.from(data.slice(0, 8))
+        const signature = Array.from(data.slice(0, 16))
             .map(byte => byte.toString(16).padStart(2, '0'))
-            .join('').toUpperCase();
+            .join(' ').toUpperCase();
+
+        this.log(`📄 Assinatura detectada: ${signature}`, 'info');
 
         const knownSignatures = [
-            '25504446', // PDF
+            '25504446', // PDF (%PDF)
             '504B0304', // ZIP/Office
             '89504E47', // PNG
             'FFD8FFE0', // JPEG
+            'FFD8FFE1', // JPEG
             '474946383', // GIF
+            'D0CF11E0', // MS Office
+            '504B0506', // ZIP vazio
+            '504B0708', // ZIP
         ];
 
+        const signatureHex = Array.from(data.slice(0, 8))
+            .map(byte => byte.toString(16).padStart(2, '0'))
+            .join('').toUpperCase();
+
         const hasValidSignature = knownSignatures.some(sig => 
-            signature.startsWith(sig)
+            signatureHex.startsWith(sig)
         );
 
         if (hasValidSignature) {
-            this.log(`✅ Assinatura de arquivo válida detectada: ${signature}`, 'success');
+            this.log(`✅ Assinatura de arquivo conhecida: ${signatureHex}`, 'success');
+        } else {
+            this.log(`⚠️ Assinatura desconhecida, mas dados parecem válidos: ${signatureHex}`, 'warning');
         }
 
+        // Verificar se os dados têm entropia suficiente (não são lixo)
+        const uniqueBytes = new Set(data.slice(0, 100)).size;
+        const entropy = uniqueBytes / Math.min(100, data.length);
+        
+        if (entropy < 0.1) {
+            this.log('❌ Dados com baixa entropia - provavelmente inválidos', 'error');
+            return false;
+        }
+
+        this.log(`✅ Dados descriptografados parecem válidos (entropia: ${(entropy * 100).toFixed(1)}%)`, 'success');
         return true;
     }
 }
