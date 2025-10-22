@@ -1064,20 +1064,7 @@ class WantToCryDecryptor {
         const resultsSection = document.getElementById('resultsSection');
         
         if (result && result.success) {
-            // Armazenar dados descriptografados para download
-            if (!this.decryptedData) {
-                this.decryptedData = [];
-            }
-            
-            // Adicionar dados descriptografados à lista
-            this.decryptedData.push({
-                originalName: this.currentFile ? this.currentFile.name : 'arquivo_descriptografado',
-                decryptedContent: result.data || result.decryptedData,
-                key: result.key,
-                algorithm: result.algorithm,
-                method: result.method,
-                timestamp: new Date()
-            });
+            // NÃO adicionar mais dados ao decryptedData aqui - já foi feito na função de descriptografia
             
             const algorithmText = result.algorithm ? ` usando ${result.algorithm}` : '';
             const methodText = result.method ? ` (${result.method})` : '';
@@ -1097,8 +1084,7 @@ class WantToCryDecryptor {
                             <i class="fas fa-file-archive"></i> Baixar Originais (ZIP)
                         </button>
                     </div>
-                </div>
-            `;
+                </div>`;
         } else {
             resultsSection.innerHTML = `
                 <div class="error-message">
@@ -1378,9 +1364,9 @@ class WantToCryDecryptor {
                         this.logMessage('🔧 Aplicando correção específica para PDF...', 'info');
                         correctedData = this.fixPDFSpecific(correctedData);
                     } else {
-                        // Para outros tipos, aplicar correção genérica
-                        this.logMessage('🔧 Aplicando correção genérica...', 'info');
-                        correctedData = this.applyGenericHeaderFix(correctedData, expectedHeader);
+                        // Para outros tipos, manter dados originais sem modificação
+                        this.logMessage('⚠️ Header não encontrado. Mantendo dados originais.', 'warning');
+                        this.logMessage('ℹ️ O arquivo pode estar corrompido ou não ser do tipo esperado', 'info');
                     }
                 }
             } else {
@@ -1445,47 +1431,11 @@ class WantToCryDecryptor {
             }
         }
         
-        // Se não encontrou, forçar criação de PDF válido
-        this.logMessage('⚠️ Padrão PDF não encontrado. Tentando reconstrução...', 'warning');
+        // Se não encontrou header PDF válido, retornar dados originais sem modificação
+        this.logMessage('⚠️ Padrão PDF não encontrado. Mantendo dados originais.', 'warning');
+        this.logMessage('ℹ️ O arquivo pode não ser um PDF válido ou estar muito corrompido', 'info');
         
-        // Tentar diferentes estratégias de reconstrução
-        const strategies = [
-            { name: 'Pular 16 bytes corrompidos', skip: 16 },
-            { name: 'Pular 32 bytes corrompidos', skip: 32 },
-            { name: 'Pular 64 bytes corrompidos', skip: 64 },
-            { name: 'Pular 128 bytes corrompidos', skip: 128 }
-        ];
-        
-        for (const strategy of strategies) {
-            if (strategy.skip < dataView.length) {
-                this.logMessage(`🔧 Tentando estratégia: ${strategy.name}`, 'info');
-                
-                // Criar novo PDF com header correto
-                const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A]); // %PDF-1.4\n
-                const contentStart = strategy.skip;
-                const newData = new Uint8Array(pdfHeader.length + (dataView.length - contentStart));
-                
-                // Copiar header
-                newData.set(pdfHeader, 0);
-                
-                // Copiar conteúdo (pulando bytes corrompidos)
-                newData.set(dataView.slice(contentStart), pdfHeader.length);
-                
-                this.logMessage(`✅ PDF reconstruído com estratégia: ${strategy.name} (${newData.length} bytes)`, 'success');
-                this.logMessage(`🔍 Novos primeiros 16 bytes: ${Array.from(newData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`, 'info');
-                return newData;
-            }
-        }
-        
-        // Última tentativa: header + todo o conteúdo
-        this.logMessage('🔧 Última tentativa: header + conteúdo completo', 'info');
-        const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A]); // %PDF-1.4\n
-        const finalData = new Uint8Array(pdfHeader.length + dataView.length);
-        finalData.set(pdfHeader, 0);
-        finalData.set(dataView, pdfHeader.length);
-        
-        this.logMessage(`✅ PDF final criado: ${finalData.length} bytes`, 'success');
-        return finalData;
+        return dataView;
     }
 
     // Correção genérica para outros tipos de arquivo
