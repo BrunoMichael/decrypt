@@ -128,6 +128,8 @@ class ModernCrypto {
 
         } catch (error) {
             this.log(`❌ Erro WebCrypto ${mode}: ${error.message}`, 'error');
+            this.log(`⚠️ WebCrypto falhou: ${error.name} - ${error.message}`, 'error');
+            console.error('WebCrypto Error Details:', error);
             throw error;
         }
     }

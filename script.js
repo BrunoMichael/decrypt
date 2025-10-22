@@ -168,6 +168,10 @@ class WantToCryDecryptor {
         const keys = [];
         const id = this.uniqueID;
         
+        // Informações específicas do WantToCry baseadas nos dados fornecidos
+        const toxID = '1D9E589C757304F688514280E3ADBE2E12C5F46DE25A01EBBAAB17896D0BAA59BFCEE0D493A6';
+        const victimID = '3C579D75CF2341758A9B984A0B943F18';
+        
         // Método 1: ID direto
         keys.push(id);
         
@@ -196,7 +200,7 @@ class WantToCryDecryptor {
         keys.push(this.xorWithPattern(id, 'WANTOCRY'));
         
         // Método 10: Combinação com Tox ID
-        keys.push(this.combineIDs(id, this.toxID.substring(0, 16)));
+        keys.push(this.combineIDs(id, toxID.substring(0, 16)));
         
         // Método 11: Rotação de caracteres
         keys.push(this.rotateString(id, 13)); // ROT13 style
@@ -206,6 +210,62 @@ class WantToCryDecryptor {
         
         // Método 13: Apenas letras do ID
         keys.push(id.replace(/[^A-Fa-f]/g, ''));
+        
+        // NOVOS MÉTODOS - Chaves específicas do WantToCry
+        
+        // Método 14: Chave padrão WannaCry
+        keys.push('WNcry@2ol7');
+        
+        // Método 15: Tox ID completo
+        keys.push(toxID);
+        
+        // Método 16: Segmentos do Tox ID
+        keys.push(toxID.substring(0, 32)); // Primeira metade
+        keys.push(toxID.substring(32, 64)); // Segunda metade
+        keys.push(toxID.substring(toxID.length - 32)); // Últimos 32 chars
+        
+        // Método 17: Combinações com ID da vítima conhecido
+        if (id === victimID) {
+            keys.push('VICTIM_' + victimID);
+            keys.push(victimID + '_KEY');
+            keys.push(this.simpleHash(victimID + toxID, 32));
+        }
+        
+        // Método 18: Padrões WantToCry específicos
+        keys.push('WantToCry_' + id);
+        keys.push(id + '_WantToCry');
+        keys.push('WANTTOCRY' + id.substring(0, 16));
+        
+        // Método 19: Combinações com valores de resgate
+        keys.push(id + '600'); // USD do resgate
+        keys.push(id + '500'); // Valor alternativo
+        keys.push('600USD' + id);
+        
+        // Método 20: Baseado em qTox
+        keys.push('qTox_' + id);
+        keys.push(id + '_qTox');
+        keys.push(this.simpleHash('qTox' + id, 32));
+        
+        // Método 21: Chaves derivadas do Tox ID
+        keys.push(this.simpleHash(toxID, 16));
+        keys.push(this.simpleHash(toxID, 24));
+        keys.push(this.simpleHash(toxID, 32));
+        keys.push(this.xorWithPattern(toxID, id));
+        
+        // Método 22: Combinações temporais
+        keys.push(id + '2024');
+        keys.push(id + '2023');
+        keys.push('2024' + id);
+        
+        // Método 23: Padrões hexadecimais puros
+        keys.push(id.replace(/[^0-9A-Fa-f]/g, '').substring(0, 32));
+        keys.push(toxID.replace(/[^0-9A-Fa-f]/g, '').substring(0, 32));
+        
+        // Método 24: Hash duplo do ID
+        keys.push(this.simpleHash(this.simpleHash(id, 16), 16));
+        
+        // Método 25: XOR com padrão diferente
+        keys.push(this.xorWithPattern(id, 'DECRYPT'));
         
         return keys;
     }
@@ -1486,6 +1546,30 @@ class WantToCryDecryptor {
             return dataView;
         }
         
+        // NOVA ESTRATÉGIA 1: Análise de possível corrupção de chave
+        this.logMessage('🔍 Analisando possível corrupção de chave de descriptografia...', 'info');
+        const keyAnalysis = this.analyzeDecryptionKeyIssues(dataView);
+        if (keyAnalysis.needsAlternativeKey) {
+            this.logMessage('⚠️ Dados sugerem chave de descriptografia incorreta ou incompleta', 'warning');
+            this.logMessage(`📊 Entropia dos dados: ${keyAnalysis.entropy.toFixed(2)}%`, 'info');
+            this.logMessage(`🔍 Padrões detectados: ${keyAnalysis.patterns.join(', ')}`, 'info');
+        }
+        
+        // NOVA ESTRATÉGIA 2: Análise de diferentes offsets comuns
+        this.logMessage('🔍 Testando offsets comuns de corrupção...', 'info');
+        const offsetResult = this.tryCommonOffsets(dataView);
+        if (offsetResult) {
+            return offsetResult;
+        }
+        
+        // NOVA ESTRATÉGIA 3: Análise de possível dupla criptografia
+        this.logMessage('🔍 Verificando possível dupla criptografia...', 'info');
+        const doubleCryptResult = this.analyzeDoubleCryptography(dataView);
+        if (doubleCryptResult.isLikelyDoubleCrypted) {
+            this.logMessage('⚠️ Arquivo pode ter dupla criptografia ou obfuscação adicional', 'warning');
+            this.logMessage(`📊 Indicadores: ${doubleCryptResult.indicators.join(', ')}`, 'info');
+        }
+        
         // Busca mais abrangente por padrões PDF
         const result = this.searchForPDFPatterns(dataView);
         if (result) {
@@ -1510,11 +1594,172 @@ class WantToCryDecryptor {
             return forcedReconstruction;
         }
         
+        // NOVA ESTRATÉGIA 4: Análise de formato alternativo
+        this.logMessage('🔍 Analisando se arquivo pode ser de formato diferente...', 'info');
+        const formatAnalysis = this.analyzeAlternativeFormats(dataView);
+        if (formatAnalysis.detectedFormat !== 'unknown') {
+            this.logMessage(`🔍 Formato alternativo detectado: ${formatAnalysis.detectedFormat}`, 'info');
+            this.logMessage(`📊 Confiança: ${formatAnalysis.confidence}%`, 'info');
+        }
+        
         // Se não encontrou header PDF válido, retornar dados originais sem modificação
         this.logMessage('⚠️ Padrão PDF não encontrado após busca completa. Mantendo dados originais.', 'warning');
-        this.logMessage('ℹ️ O arquivo pode não ser um PDF válido ou estar muito corrompido', 'info');
+        this.logMessage('ℹ️ O arquivo pode não ser um PDF válido, estar muito corrompido, ou ter chave incorreta', 'info');
         
         return dataView;
+    }
+
+    // Análise de problemas de chave de descriptografia
+    analyzeDecryptionKeyIssues(dataView) {
+        const entropy = this.calculateEntropy(dataView);
+        const patterns = [];
+        let needsAlternativeKey = false;
+        
+        // Verificar se a entropia é muito baixa (indicando dados não descriptografados corretamente)
+        if (entropy < 70) {
+            patterns.push('Entropia baixa');
+            needsAlternativeKey = true;
+        }
+        
+        // Verificar padrões repetitivos que indicam descriptografia incorreta
+        const hasRepeating = this.hasRepeatingPatterns(dataView);
+        if (hasRepeating) {
+            patterns.push('Padrões repetitivos');
+            needsAlternativeKey = true;
+        }
+        
+        // Verificar se há bytes nulos excessivos
+        let nullCount = 0;
+        for (let i = 0; i < Math.min(1000, dataView.length); i++) {
+            if (dataView[i] === 0) nullCount++;
+        }
+        if (nullCount > dataView.length * 0.1) {
+            patterns.push('Excesso de bytes nulos');
+            needsAlternativeKey = true;
+        }
+        
+        return { entropy, patterns, needsAlternativeKey };
+    }
+
+    // Testar offsets comuns onde o PDF pode começar
+    tryCommonOffsets(dataView) {
+        const commonOffsets = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+        const pdfHeader = [0x25, 0x50, 0x44, 0x46]; // %PDF
+        
+        for (const offset of commonOffsets) {
+            if (offset >= dataView.length - 4) continue;
+            
+            // Verificar se há header PDF neste offset
+            let matches = true;
+            for (let i = 0; i < pdfHeader.length; i++) {
+                if (dataView[offset + i] !== pdfHeader[i]) {
+                    matches = false;
+                    break;
+                }
+            }
+            
+            if (matches) {
+                this.logMessage(`✅ Header PDF encontrado no offset ${offset}!`, 'success');
+                // Retornar dados a partir do offset correto
+                return new Uint8Array(dataView.slice(offset));
+            }
+        }
+        
+        return null;
+    }
+
+    // Análise de possível dupla criptografia
+    analyzeDoubleCryptography(dataView) {
+        const indicators = [];
+        let isLikelyDoubleCrypted = false;
+        
+        // Verificar entropia muito alta (indicando dados ainda criptografados)
+        const entropy = this.calculateEntropy(dataView);
+        if (entropy > 95) {
+            indicators.push('Entropia extremamente alta');
+            isLikelyDoubleCrypted = true;
+        }
+        
+        // Verificar distribuição uniforme de bytes
+        const byteFreq = new Array(256).fill(0);
+        for (let i = 0; i < Math.min(10000, dataView.length); i++) {
+            byteFreq[dataView[i]]++;
+        }
+        
+        const avgFreq = Math.min(10000, dataView.length) / 256;
+        let uniformCount = 0;
+        for (let freq of byteFreq) {
+            if (Math.abs(freq - avgFreq) < avgFreq * 0.1) {
+                uniformCount++;
+            }
+        }
+        
+        if (uniformCount > 200) {
+            indicators.push('Distribuição de bytes muito uniforme');
+            isLikelyDoubleCrypted = true;
+        }
+        
+        // Verificar ausência de padrões textuais
+        const textRatio = this.calculateTextRatio(dataView.slice(0, Math.min(1000, dataView.length)));
+        if (textRatio < 0.05) {
+            indicators.push('Ausência total de padrões textuais');
+            isLikelyDoubleCrypted = true;
+        }
+        
+        return { isLikelyDoubleCrypted, indicators };
+    }
+
+    // Análise de formatos alternativos
+    analyzeAlternativeFormats(dataView) {
+        const formats = [
+            { name: 'ZIP/DOCX', signature: [0x50, 0x4B, 0x03, 0x04], confidence: 0 },
+            { name: 'PNG', signature: [0x89, 0x50, 0x4E, 0x47], confidence: 0 },
+            { name: 'JPEG', signature: [0xFF, 0xD8, 0xFF], confidence: 0 },
+            { name: 'GIF', signature: [0x47, 0x49, 0x46, 0x38], confidence: 0 },
+            { name: 'BMP', signature: [0x42, 0x4D], confidence: 0 },
+            { name: 'RTF', signature: [0x7B, 0x5C, 0x72, 0x74], confidence: 0 },
+            { name: 'XML', signature: [0x3C, 0x3F, 0x78, 0x6D], confidence: 0 }
+        ];
+        
+        // Verificar assinaturas no início do arquivo
+        for (let format of formats) {
+            let matches = 0;
+            for (let i = 0; i < format.signature.length && i < dataView.length; i++) {
+                if (dataView[i] === format.signature[i]) {
+                    matches++;
+                }
+            }
+            format.confidence = (matches / format.signature.length) * 100;
+        }
+        
+        // Verificar assinaturas em offsets comuns
+        const offsets = [0, 1, 2, 4, 8, 16, 32];
+        for (let offset of offsets) {
+            if (offset >= dataView.length) continue;
+            
+            for (let format of formats) {
+                let matches = 0;
+                for (let i = 0; i < format.signature.length && (offset + i) < dataView.length; i++) {
+                    if (dataView[offset + i] === format.signature[i]) {
+                        matches++;
+                    }
+                }
+                const offsetConfidence = (matches / format.signature.length) * 100;
+                if (offsetConfidence > format.confidence) {
+                    format.confidence = offsetConfidence;
+                }
+            }
+        }
+        
+        // Encontrar o formato com maior confiança
+        let bestFormat = { detectedFormat: 'unknown', confidence: 0 };
+        for (let format of formats) {
+            if (format.confidence > bestFormat.confidence && format.confidence > 50) {
+                bestFormat = { detectedFormat: format.name, confidence: format.confidence };
+            }
+        }
+        
+        return bestFormat;
     }
 
     // Busca abrangente por padrões PDF em todo o arquivo
