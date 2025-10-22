@@ -66,18 +66,30 @@ class ModernCrypto {
             const keyBuffer = this.hexToArrayBuffer(keyHex);
             const encryptedBuffer = this.hexToArrayBuffer(encryptedHex);
 
-            // Importar a chave
+            // Importar a chave com algoritmo correto
+            let algorithmName;
+            if (mode === 'AES-CBC' || mode === 'CBC') {
+                algorithmName = 'AES-CBC';
+            } else if (mode === 'AES-CTR' || mode === 'CTR') {
+                algorithmName = 'AES-CTR';
+            } else {
+                // Fallback para CBC se modo não reconhecido
+                algorithmName = 'AES-CBC';
+            }
+            
+            this.log(`🔑 Importando chave com algoritmo: ${algorithmName}`, 'info');
+            
             const cryptoKey = await window.crypto.subtle.importKey(
                 'raw',
                 keyBuffer,
-                { name: mode.split('-')[0] },
+                algorithmName,
                 false,
                 ['decrypt']
             );
 
             let decryptedBuffer;
             
-            if (mode === 'AES-CBC') {
+            if (mode === 'AES-CBC' || mode === 'CBC') {
                 // Para CBC, os primeiros 16 bytes são o IV
                 const iv = encryptedBuffer.slice(0, 16);
                 const ciphertext = encryptedBuffer.slice(16);
@@ -90,11 +102,11 @@ class ModernCrypto {
                     cryptoKey,
                     ciphertext
                 );
-            } else if (mode === 'AES-ECB') {
+            } else if (mode === 'AES-ECB' || mode === 'ECB') {
                 // ECB não é suportado nativamente no WebCrypto
                 // Usar fallback para crypto-js
                 return this.decryptWithCryptoJS(encryptedHex, keyHex, 'ECB');
-            } else if (mode === 'AES-CTR') {
+            } else if (mode === 'AES-CTR' || mode === 'CTR') {
                 // Para CTR, os primeiros 16 bytes são o counter
                 const counter = encryptedBuffer.slice(0, 16);
                 const ciphertext = encryptedBuffer.slice(16);
@@ -192,7 +204,7 @@ class ModernCrypto {
     }
 
     /**
-     * Método principal de descriptografia
+     * Método principal de descriptografia com abordagem mais robusta
      * Tenta WebCrypto primeiro, depois fallback para crypto-js
      */
     async decrypt(encryptedHex, keyHex, mode = 'AES-CBC') {
@@ -208,26 +220,41 @@ class ModernCrypto {
             throw new Error(`Chave deve ter 64 caracteres hex (32 bytes), recebido: ${keyHex.length}`);
         }
 
+        let lastError = null;
+
         try {
             // Tentar WebCrypto primeiro (mais rápido e seguro)
             if (this.isWebCryptoSupported && mode !== 'AES-ECB') {
-                return await this.decryptWithWebCrypto(encryptedHex, keyHex, mode);
-            } else {
-                // Fallback para crypto-js
-                const cryptoJSMode = mode.replace('AES-', '');
-                return this.decryptWithCryptoJS(encryptedHex, keyHex, cryptoJSMode);
+                try {
+                    return await this.decryptWithWebCrypto(encryptedHex, keyHex, mode);
+                } catch (webCryptoError) {
+                    this.log(`⚠️ WebCrypto falhou: ${webCryptoError.message}`, 'warning');
+                    lastError = webCryptoError;
+                    // Continuar para fallback
+                }
             }
+            
+            // Fallback para crypto-js sempre disponível
+            this.log(`🔄 Tentando método de descriptografia legado...`, 'warning');
+            const cryptoJSMode = mode.replace('AES-', '');
+            return this.decryptWithCryptoJS(encryptedHex, keyHex, cryptoJSMode);
+            
         } catch (error) {
             this.log(`💥 Falha na descriptografia ${mode}: ${error.message}`, 'error');
+            // Se temos um erro anterior do WebCrypto, incluir na mensagem
+            if (lastError) {
+                throw new Error(`WebCrypto: ${lastError.message}; CryptoJS: ${error.message}`);
+            }
             throw error;
         }
     }
 
     /**
-     * Tenta múltiplos modos de descriptografia
+     * Tenta múltiplos modos de descriptografia com abordagem mais robusta
      */
     async tryAllModes(encryptedHex, keyHex) {
         const modes = ['AES-CBC', 'AES-ECB', 'AES-CTR'];
+        const errors = [];
         
         for (const mode of modes) {
             try {
@@ -241,11 +268,15 @@ class ModernCrypto {
                 }
             } catch (error) {
                 this.log(`❌ Modo ${mode} falhou: ${error.message}`, 'warning');
+                errors.push(`${mode}: ${error.message}`);
                 continue;
             }
         }
         
-        throw new Error('Nenhum modo de descriptografia funcionou');
+        // Se chegou aqui, nenhum modo funcionou
+        const errorMessage = `Nenhum modo de descriptografia funcionou. Erros: ${errors.join('; ')}`;
+        this.log(`💥 ${errorMessage}`, 'error');
+        throw new Error(errorMessage);
     }
 
     /**

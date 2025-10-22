@@ -1475,9 +1475,10 @@ class WantToCryDecryptor {
         const dataView = new Uint8Array(data);
         this.logMessage(`📊 Tamanho do arquivo PDF: ${dataView.length} bytes`, 'info');
         
-        // Log dos primeiros 32 bytes para debug
-        const first32Bytes = Array.from(dataView.slice(0, 32)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-        this.logMessage(`🔍 Primeiros 32 bytes do PDF: ${first32Bytes}`, 'info');
+        // Log dos primeiros 64 bytes para debug mais detalhado
+        const first64Bytes = Array.from(dataView.slice(0, Math.min(64, dataView.length)))
+            .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        this.logMessage(`🔍 Primeiros ${Math.min(64, dataView.length)} bytes do PDF: ${first64Bytes}`, 'info');
         
         // Verificar se já tem header PDF correto
         if (dataView[0] === 0x25 && dataView[1] === 0x50 && dataView[2] === 0x44 && dataView[3] === 0x46) {
@@ -1485,26 +1486,381 @@ class WantToCryDecryptor {
             return dataView;
         }
         
-        // Procurar por padrões PDF no arquivo (busca mais ampla)
-        const searchLimit = Math.min(2048, dataView.length); // Procurar nos primeiros 2KB
-        this.logMessage(`🔍 Procurando padrão PDF nos primeiros ${searchLimit} bytes...`, 'info');
+        // Busca mais abrangente por padrões PDF
+        const result = this.searchForPDFPatterns(dataView);
+        if (result) {
+            return result;
+        }
         
-        // Procurar por "%PDF" como string
-        for (let i = 0; i < searchLimit - 4; i++) {
-            if (dataView[i] === 0x25 && dataView[i+1] === 0x50 && 
-                dataView[i+2] === 0x44 && dataView[i+3] === 0x46) {
-                this.logMessage(`✅ Header PDF válido encontrado na posição ${i}`, 'success');
-                const result = dataView.slice(i);
-                this.logMessage(`📄 Novo tamanho após correção: ${result.length} bytes`, 'info');
+        // Tentar estratégias avançadas de recuperação
+        const recoveredPDF = this.attemptPDFRecovery(dataView);
+        if (recoveredPDF) {
+            return recoveredPDF;
+        }
+        
+        // Nova estratégia: análise de conteúdo textual PDF
+        const textBasedRecovery = this.attemptTextBasedPDFRecovery(dataView);
+        if (textBasedRecovery) {
+            return textBasedRecovery;
+        }
+        
+        // Estratégia final: tentar reconstrução com header PDF forçado
+        const forcedReconstruction = this.attemptForcedPDFReconstruction(dataView);
+        if (forcedReconstruction) {
+            return forcedReconstruction;
+        }
+        
+        // Se não encontrou header PDF válido, retornar dados originais sem modificação
+        this.logMessage('⚠️ Padrão PDF não encontrado após busca completa. Mantendo dados originais.', 'warning');
+        this.logMessage('ℹ️ O arquivo pode não ser um PDF válido ou estar muito corrompido', 'info');
+        
+        return dataView;
+    }
+
+    // Busca abrangente por padrões PDF em todo o arquivo
+    searchForPDFPatterns(dataView) {
+        // Busca em múltiplas fases com diferentes limites
+        const searchPhases = [
+            { limit: Math.min(2048, dataView.length), name: "primeiros 2KB" },
+            { limit: Math.min(8192, dataView.length), name: "primeiros 8KB" },
+            { limit: Math.min(32768, dataView.length), name: "primeiros 32KB" },
+            { limit: dataView.length, name: "arquivo completo" }
+        ];
+
+        for (const phase of searchPhases) {
+            this.logMessage(`🔍 Procurando padrão PDF nos ${phase.name}...`, 'info');
+            
+            // Procurar por "%PDF" como string
+            for (let i = 0; i < phase.limit - 4; i++) {
+                if (dataView[i] === 0x25 && dataView[i+1] === 0x50 && 
+                    dataView[i+2] === 0x44 && dataView[i+3] === 0x46) {
+                    this.logMessage(`✅ Header PDF válido encontrado na posição ${i}`, 'success');
+                    const result = dataView.slice(i);
+                    this.logMessage(`📄 Novo tamanho após correção: ${result.length} bytes`, 'info');
+                    return result;
+                }
+            }
+            
+            // Se arquivo é pequeno, não precisa continuar as fases
+            if (phase.limit === dataView.length && phase.limit < 32768) {
+                break;
+            }
+        }
+        
+        return null;
+    }
+
+    // Tentativas avançadas de recuperação de PDF
+    attemptPDFRecovery(dataView) {
+        this.logMessage('🔧 Tentando estratégias avançadas de recuperação PDF...', 'info');
+        
+        // Estratégia 1: Procurar por outros padrões PDF comuns
+        const pdfPatterns = [
+            // Versões diferentes do PDF
+            [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E], // %PDF-1.
+            [0x25, 0x50, 0x44, 0x46, 0x2D], // %PDF-
+            // Padrões de objetos PDF
+            [0x31, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A], // "1 0 obj"
+            [0x32, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A], // "2 0 obj"
+            [0x33, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A], // "3 0 obj"
+            // Padrão de stream
+            [0x73, 0x74, 0x72, 0x65, 0x61, 0x6D], // "stream"
+            // Padrão de xref
+            [0x78, 0x72, 0x65, 0x66], // "xref"
+            // Padrão de trailer
+            [0x74, 0x72, 0x61, 0x69, 0x6C, 0x65, 0x72] // "trailer"
+        ];
+
+        for (const pattern of pdfPatterns) {
+            const position = this.findPatternInData(dataView, pattern);
+            if (position !== -1) {
+                this.logMessage(`🎯 Padrão PDF encontrado na posição ${position}: ${pattern.map(b => String.fromCharCode(b)).join('')}`, 'info');
+                
+                // Se encontrou um padrão, tentar reconstruir o PDF
+                if (pattern[0] === 0x25) { // Se é um header %PDF
+                    const result = dataView.slice(position);
+                    this.logMessage(`📄 PDF recuperado a partir da posição ${position}`, 'success');
+                    return result;
+                } else {
+                    // Para outros padrões, tentar encontrar o início real do PDF próximo
+                    const pdfStart = this.findNearbyPDFHeader(dataView, position);
+                    if (pdfStart !== -1) {
+                        const result = dataView.slice(pdfStart);
+                        this.logMessage(`📄 PDF recuperado a partir da posição ${pdfStart} (próximo ao padrão)`, 'success');
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // Estratégia 2: Análise de entropia para encontrar início de dados estruturados
+        const structuredStart = this.findStructuredDataStart(dataView);
+        if (structuredStart !== -1) {
+            this.logMessage(`🔍 Possível início de dados estruturados na posição ${structuredStart}`, 'info');
+            // Verificar se há padrões PDF próximos
+            const nearbyPDF = this.findNearbyPDFHeader(dataView, structuredStart);
+            if (nearbyPDF !== -1) {
+                const result = dataView.slice(nearbyPDF);
+                this.logMessage(`📄 PDF recuperado através de análise de entropia`, 'success');
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    // Encontrar padrão específico nos dados
+    findPatternInData(dataView, pattern) {
+        const searchLimit = Math.min(65536, dataView.length - pattern.length); // Buscar nos primeiros 64KB
+        
+        for (let i = 0; i < searchLimit; i++) {
+            let matches = true;
+            for (let j = 0; j < pattern.length; j++) {
+                if (dataView[i + j] !== pattern[j]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                return i;
+            }
+        }
+        
+        return -1;
+    }
+
+    // Nova estratégia: análise de conteúdo textual PDF
+    attemptTextBasedPDFRecovery(dataView) {
+        this.logMessage('🔍 Tentando recuperação baseada em análise textual PDF...', 'info');
+        
+        // Converter bytes para string para análise textual
+        const textContent = Array.from(dataView.slice(0, Math.min(8192, dataView.length)))
+            .map(b => String.fromCharCode(b)).join('');
+        
+        // Procurar por padrões textuais PDF comuns
+        const pdfTextPatterns = [
+            '%PDF-1.',
+            'PDF-1.',
+            '1 0 obj',
+            '2 0 obj', 
+            'stream',
+            'endstream',
+            'xref',
+            'trailer',
+            'startxref',
+            '/Type /Catalog',
+            '/Type /Page',
+            '/Filter /FlateDecode'
+        ];
+        
+        let bestMatch = { pattern: null, position: -1, confidence: 0 };
+        
+        for (const pattern of pdfTextPatterns) {
+            const position = textContent.indexOf(pattern);
+            if (position !== -1) {
+                // Calcular confiança baseada no tipo de padrão
+                let confidence = 1;
+                if (pattern.includes('%PDF')) confidence = 10;
+                else if (pattern.includes('obj')) confidence = 8;
+                else if (pattern === 'stream' || pattern === 'xref') confidence = 6;
+                else confidence = 4;
+                
+                this.logMessage(`🎯 Padrão textual encontrado: "${pattern}" na posição ${position} (confiança: ${confidence})`, 'info');
+                
+                if (confidence > bestMatch.confidence) {
+                    bestMatch = { pattern, position, confidence };
+                }
+            }
+        }
+        
+        if (bestMatch.position !== -1) {
+            // Se encontrou um padrão com alta confiança, tentar recuperar
+            if (bestMatch.confidence >= 6) {
+                let startPosition = bestMatch.position;
+                
+                // Se não é um header PDF, procurar por um próximo
+                if (!bestMatch.pattern.includes('%PDF')) {
+                    // Procurar por %PDF próximo ao padrão encontrado
+                    const searchStart = Math.max(0, bestMatch.position - 1024);
+                    const searchEnd = Math.min(dataView.length, bestMatch.position + 1024);
+                    
+                    for (let i = searchStart; i < searchEnd - 4; i++) {
+                        if (dataView[i] === 0x25 && dataView[i+1] === 0x50 && 
+                            dataView[i+2] === 0x44 && dataView[i+3] === 0x46) {
+                            startPosition = i;
+                            this.logMessage(`✅ Header PDF encontrado próximo ao padrão textual na posição ${i}`, 'success');
+                            break;
+                        }
+                    }
+                }
+                
+                const result = dataView.slice(startPosition);
+                this.logMessage(`📄 PDF recuperado através de análise textual (${result.length} bytes)`, 'success');
                 return result;
             }
         }
         
-        // Se não encontrou header PDF válido, retornar dados originais sem modificação
-        this.logMessage('⚠️ Padrão PDF não encontrado. Mantendo dados originais.', 'warning');
-        this.logMessage('ℹ️ O arquivo pode não ser um PDF válido ou estar muito corrompido', 'info');
+        return null;
+    }
+
+    // Estratégia final: reconstrução forçada com header PDF
+    attemptForcedPDFReconstruction(dataView) {
+        this.logMessage('🔧 Tentando reconstrução forçada com header PDF...', 'info');
         
-        return dataView;
+        // Analisar se o conteúdo tem características de PDF
+        const hasObjectReferences = this.hasObjectReferences(dataView);
+        const hasStreamContent = this.hasStreamContent(dataView);
+        const hasXrefTable = this.hasXrefTable(dataView);
+        
+        this.logMessage(`📊 Análise estrutural: Objetos=${hasObjectReferences}, Streams=${hasStreamContent}, Xref=${hasXrefTable}`, 'info');
+        
+        // Se tem pelo menos 2 características de PDF, tentar reconstrução
+        const pdfCharacteristics = [hasObjectReferences, hasStreamContent, hasXrefTable].filter(Boolean).length;
+        
+        if (pdfCharacteristics >= 2) {
+            this.logMessage('🔧 Arquivo parece ter estrutura PDF. Tentando reconstrução...', 'info');
+            
+            // Procurar por um ponto de início mais provável
+            const likelyStart = this.findLikelyPDFStart(dataView);
+            
+            if (likelyStart !== -1) {
+                // Criar novo array com header PDF correto
+                const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A]); // %PDF-1.4\n
+                const contentStart = dataView.slice(likelyStart);
+                
+                const reconstructed = new Uint8Array(pdfHeader.length + contentStart.length);
+                reconstructed.set(pdfHeader, 0);
+                reconstructed.set(contentStart, pdfHeader.length);
+                
+                this.logMessage(`✅ PDF reconstruído com header forçado (${reconstructed.length} bytes)`, 'success');
+                return reconstructed;
+            }
+        }
+        
+        return null;
+    }
+
+    // Verificar se tem referências de objetos PDF
+    hasObjectReferences(dataView) {
+        const text = Array.from(dataView.slice(0, Math.min(4096, dataView.length)))
+            .map(b => String.fromCharCode(b)).join('');
+        return /\d+\s+\d+\s+obj/.test(text);
+    }
+
+    // Verificar se tem conteúdo de streams
+    hasStreamContent(dataView) {
+        const text = Array.from(dataView.slice(0, Math.min(4096, dataView.length)))
+            .map(b => String.fromCharCode(b)).join('');
+        return text.includes('stream') && text.includes('endstream');
+    }
+
+    // Verificar se tem tabela xref
+    hasXrefTable(dataView) {
+        const text = Array.from(dataView.slice(0, Math.min(4096, dataView.length)))
+            .map(b => String.fromCharCode(b)).join('');
+        return text.includes('xref') || text.includes('trailer');
+    }
+
+    // Encontrar início mais provável do conteúdo PDF
+    findLikelyPDFStart(dataView) {
+        // Procurar por padrões que indicam início de conteúdo estruturado
+        const patterns = [
+            [0x31, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A], // "1 0 obj"
+            [0x32, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A], // "2 0 obj"
+            [0x78, 0x72, 0x65, 0x66], // "xref"
+        ];
+        
+        for (const pattern of patterns) {
+            const position = this.findPatternInData(dataView, pattern);
+            if (position !== -1) {
+                // Voltar um pouco para capturar possível conteúdo anterior
+                return Math.max(0, position - 64);
+            }
+        }
+        
+        return -1;
+    }
+
+    // Encontrar header PDF próximo a uma posição
+    findNearbyPDFHeader(dataView, position) {
+        const searchRange = 1024; // Buscar 1KB antes e depois
+        const start = Math.max(0, position - searchRange);
+        const end = Math.min(dataView.length - 4, position + searchRange);
+        
+        for (let i = start; i < end; i++) {
+            if (dataView[i] === 0x25 && dataView[i+1] === 0x50 && 
+                dataView[i+2] === 0x44 && dataView[i+3] === 0x46) {
+                return i;
+            }
+        }
+        
+        return -1;
+    }
+
+    // Encontrar início de dados estruturados através de análise de entropia
+    findStructuredDataStart(dataView) {
+        const blockSize = 256;
+        const numBlocks = Math.min(256, Math.floor(dataView.length / blockSize)); // Analisar até 64KB
+        
+        let bestPosition = -1;
+        let bestScore = -1;
+        
+        for (let i = 0; i < numBlocks; i++) {
+            const start = i * blockSize;
+            const block = dataView.slice(start, start + blockSize);
+            
+            // Calcular score baseado em padrões estruturados
+            const entropy = this.calculateEntropy(block);
+            const textRatio = this.calculateTextRatio(block);
+            const structureScore = this.calculateStructureScore(block);
+            
+            // Score combinado (entropia moderada + texto + estrutura)
+            const combinedScore = (1 - Math.abs(entropy - 0.7)) * 0.4 + textRatio * 0.3 + structureScore * 0.3;
+            
+            if (combinedScore > bestScore) {
+                bestScore = combinedScore;
+                bestPosition = start;
+            }
+        }
+        
+        // Retornar posição se o score for razoável
+        return bestScore > 0.5 ? bestPosition : -1;
+    }
+
+    // Calcular proporção de caracteres de texto
+    calculateTextRatio(data) {
+        let textBytes = 0;
+        for (let i = 0; i < data.length; i++) {
+            const byte = data[i];
+            if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
+                textBytes++;
+            }
+        }
+        return textBytes / data.length;
+    }
+
+    // Calcular score de estrutura (padrões repetitivos, alinhamento, etc.)
+    calculateStructureScore(data) {
+        let score = 0;
+        
+        // Verificar alinhamento em múltiplos de 4
+        let alignedBytes = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i] !== undefined) alignedBytes++;
+        }
+        score += (alignedBytes / (data.length / 4)) * 0.3;
+        
+        // Verificar padrões repetitivos
+        const patterns = new Map();
+        for (let i = 0; i < data.length - 3; i++) {
+            const pattern = (data[i] << 24) | (data[i+1] << 16) | (data[i+2] << 8) | data[i+3];
+            patterns.set(pattern, (patterns.get(pattern) || 0) + 1);
+        }
+        
+        const maxRepeats = Math.max(...patterns.values());
+        score += Math.min(maxRepeats / 10, 0.7); // Normalizar
+        
+        return Math.min(score, 1.0);
     }
 
     // Correção genérica para outros tipos de arquivo

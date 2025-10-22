@@ -2,9 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // Função para incrementar versão
-function bumpVersion(type = 'patch') {
+function bumpVersion(type = 'patch', autoPush = false) {
     const packagePath = path.join(__dirname, 'package.json');
     const indexPath = path.join(__dirname, 'index.html');
     
@@ -42,13 +43,36 @@ function bumpVersion(type = 'patch') {
     fs.writeFileSync(indexPath, indexContent);
     
     console.log(`✅ Versão atualizada: ${currentVersion} → ${newVersion}`);
+    
+    // Se autoPush estiver habilitado, fazer commit e push
+    if (autoPush) {
+        try {
+            console.log('🔄 Fazendo commit e push automático...');
+            
+            // Adicionar todos os arquivos modificados
+            execSync('git add .', { stdio: 'inherit' });
+            
+            // Fazer commit com mensagem de versão
+            execSync(`git commit -m "v${newVersion}: Atualização automática de versão"`, { stdio: 'inherit' });
+            
+            // Push para GitHub
+            execSync('git push origin main', { stdio: 'inherit' });
+            
+            console.log('✅ Push para GitHub realizado com sucesso!');
+        } catch (error) {
+            console.error('❌ Erro durante commit/push:', error.message);
+            console.log('⚠️ Versão foi atualizada, mas não foi enviada para GitHub');
+        }
+    }
+    
     return newVersion;
 }
 
 // Executar se chamado diretamente
 if (require.main === module) {
     const type = process.argv[2] || 'patch';
-    bumpVersion(type);
+    const autoPush = process.argv.includes('--push') || process.argv.includes('-p');
+    bumpVersion(type, autoPush);
 }
 
 module.exports = { bumpVersion };
