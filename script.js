@@ -439,14 +439,15 @@ class WantToCryDecryptor {
         }
 
         if (this.isProcessing) {
-            this.logMessage('Processamento já em andamento...', 'error');
+            this.logMessage('Processamento já em andamento...', 'warning');
             return;
         }
 
         this.isProcessing = true;
         
-        // Limpar dados descriptografados anteriores
+        // Limpar dados descriptografados anteriores COMPLETAMENTE
         this.decryptedData = [];
+        this.logMessage('🧹 Array decryptedData limpo - iniciando nova descriptografia', 'info');
         
         this.logMessage('🆔 Iniciando descriptografia baseada em ID único...', 'info');
         this.logMessage(`ID único: ${this.uniqueID}`, 'info');
@@ -1122,15 +1123,24 @@ class WantToCryDecryptor {
         }
 
         this.logMessage('Preparando download dos arquivos descriptografados...', 'info');
+        this.logMessage(`📊 Total de arquivos no array: ${this.decryptedData.length}`, 'info');
 
         try {
+            // Log detalhado dos arquivos no array
+            this.decryptedData.forEach((fileData, index) => {
+                this.logMessage(`📄 Arquivo ${index + 1}: ${fileData.originalName} (${fileData.decryptedContent.length} bytes)`, 'info');
+            });
+
             // Se apenas um arquivo descriptografado
             if (this.decryptedData.length === 1) {
+                this.logMessage('📥 Baixando arquivo único...', 'info');
                 this.downloadSingleDecryptedFile(this.decryptedData[0]);
             } else {
                 // Múltiplos arquivos - baixar individualmente por enquanto
+                this.logMessage(`📥 Baixando ${this.decryptedData.length} arquivos...`, 'info');
                 this.decryptedData.forEach((fileData, index) => {
                     setTimeout(() => {
+                        this.logMessage(`📥 Baixando arquivo ${index + 1}/${this.decryptedData.length}: ${fileData.originalName}`, 'info');
                         this.downloadSingleDecryptedFile(fileData);
                     }, index * 500); // Delay entre downloads
                 });
