@@ -1180,12 +1180,23 @@ class WantToCryDecryptor {
             const originalSignature = this.getFileSignature(fileData.decryptedContent);
             this.logMessage(`📄 Assinatura original detectada: ${originalSignature}`, 'info');
 
+            // Log detalhado do processo de correção
+            this.logMessage(`🔧 Iniciando correção de headers para: ${originalName}`, 'info');
+            this.logMessage(`📊 Tamanho do arquivo: ${fileData.decryptedContent.length} bytes`, 'info');
+            
             // Aplicar correções específicas por tipo de arquivo
             let correctedData = this.fixFileHeaders(fileData.decryptedContent, originalName);
             
             // Log da assinatura após correção
             const correctedSignature = this.getFileSignature(correctedData);
             this.logMessage(`📄 Assinatura após correção: ${correctedSignature}`, 'info');
+            
+            // Verificar se a correção foi efetiva
+            if (originalSignature !== correctedSignature) {
+                this.logMessage(`✅ Header corrigido com sucesso! ${originalSignature} → ${correctedSignature}`, 'success');
+            } else {
+                this.logMessage(`ℹ️ Header não foi alterado (já estava correto ou não foi possível corrigir)`, 'info');
+            }
             
             // Criar blob com os dados corrigidos
             const mimeType = this.getMimeType(originalName);
@@ -1403,11 +1414,17 @@ class WantToCryDecryptor {
         this.logMessage('🔧 Iniciando correção específica para PDF...', 'info');
         
         const dataView = new Uint8Array(data);
-        this.logMessage(`📊 Tamanho do arquivo: ${dataView.length} bytes`, 'info');
+        this.logMessage(`📊 Tamanho do arquivo PDF: ${dataView.length} bytes`, 'info');
         
         // Log dos primeiros 32 bytes para debug
-        const first32Bytes = Array.from(dataView.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        this.logMessage(`🔍 Primeiros 32 bytes: ${first32Bytes}`, 'info');
+        const first32Bytes = Array.from(dataView.slice(0, 32)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        this.logMessage(`🔍 Primeiros 32 bytes do PDF: ${first32Bytes}`, 'info');
+        
+        // Verificar se já tem header PDF correto
+        if (dataView[0] === 0x25 && dataView[1] === 0x50 && dataView[2] === 0x44 && dataView[3] === 0x46) {
+            this.logMessage('✅ PDF já possui header correto (%PDF)', 'success');
+            return dataView;
+        }
         
         // Procurar por padrões PDF no arquivo (busca mais ampla)
         const searchLimit = Math.min(2048, dataView.length); // Procurar nos primeiros 2KB
@@ -1425,14 +1442,14 @@ class WantToCryDecryptor {
         }
         
         // Se não encontrou, forçar criação de PDF válido
-        this.logMessage('⚠️ Padrão PDF não encontrado. Forçando reconstrução...', 'warning');
+        this.logMessage('⚠️ Padrão PDF não encontrado. Tentando reconstrução...', 'warning');
         
         // Tentar diferentes estratégias de reconstrução
         const strategies = [
-            { name: 'Pular 16 bytes', skip: 16 },
-            { name: 'Pular 32 bytes', skip: 32 },
-            { name: 'Pular 64 bytes', skip: 64 },
-            { name: 'Pular 128 bytes', skip: 128 }
+            { name: 'Pular 16 bytes corrompidos', skip: 16 },
+            { name: 'Pular 32 bytes corrompidos', skip: 32 },
+            { name: 'Pular 64 bytes corrompidos', skip: 64 },
+            { name: 'Pular 128 bytes corrompidos', skip: 128 }
         ];
         
         for (const strategy of strategies) {
@@ -1451,6 +1468,7 @@ class WantToCryDecryptor {
                 newData.set(dataView.slice(contentStart), pdfHeader.length);
                 
                 this.logMessage(`✅ PDF reconstruído com estratégia: ${strategy.name} (${newData.length} bytes)`, 'success');
+                this.logMessage(`🔍 Novos primeiros 16 bytes: ${Array.from(newData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`, 'info');
                 return newData;
             }
         }
