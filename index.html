@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WantToCry Decryptor - Ferramenta de Descriptografia</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-shield-alt"></i> WantToCry Decryptor</h1>
+            <p>Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry</p>
+        </header>
+
+        <div class="warning-box">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>NUNCA PAGUE O RESGATE!</strong> Esta ferramenta tenta métodos conhecidos de descriptografia.
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <h2><i class="fas fa-upload"></i> Upload de Arquivos Criptografados</h2>
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Arraste arquivos .want_to_cry aqui ou clique para selecionar</p>
+                    <input type="file" id="fileInput" multiple accept=".want_to_cry">
+                </div>
+                <div class="file-list" id="fileList"></div>
+                <div class="download-all-section" id="downloadAllSection" style="display: none; margin-top: 15px;">
+                    <button onclick="decryptor.downloadAllOriginalFiles()" class="method-btn" style="width: 100%; background: linear-gradient(45deg, #f39c12, #e67e22);">
+                        <i class="fas fa-file-archive"></i> Baixar Todos os Arquivos Originais
+                    </button>
+                </div>
+            </div>
+
+            <div class="analysis-section">
+                <h2><i class="fas fa-search"></i> Análise dos Arquivos</h2>
+                <div class="analysis-results" id="analysisResults">
+                    <p>Selecione arquivos para começar a análise...</p>
+                </div>
+            </div>
+
+            <div class="decryption-section">
+                <h2><i class="fas fa-key"></i> Métodos de Descriptografia</h2>
+                
+                <div class="method-group">
+                    <button onclick="decryptor.tryIDBasedDecryption()" class="method-btn" id="idDecryptBtn">
+                        <i class="fas fa-fingerprint"></i> Descriptografia por ID Único
+                        <small>Usar ID: 3C579D75CF2341758A9B984A0B943F18</small>
+                    </button>
+                </div>
+
+                <div class="method-group">
+                    <button onclick="decryptor.tryBruteForce()" class="method-btn" id="bruteForceBtn">
+                        <i class="fas fa-hammer"></i> Força Bruta (Chaves Fracas)
+                    </button>
+                </div>
+
+                <div class="method-group">
+                    <button onclick="decryptor.tryKnownKeysMethod()" class="method-btn" id="knownKeysBtn">
+                        <i class="fas fa-database"></i> Chaves Conhecidas
+                    </button>
+                </div>
+
+                <div class="method-group">
+                    <button onclick="decryptor.tryAdvancedPatterns()" class="method-btn" id="patternsBtn">
+                        <i class="fas fa-search"></i> Análise Avançada de Padrões
+                    </button>
+                </div>
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="progressText">Iniciando...</p>
+                </div>
+                <div class="results-section" id="resultsSection"></div>
+            </div>
+
+            <div class="logs-section">
+                <h2><i class="fas fa-list"></i> Logs de Atividade</h2>
+                <div class="logs-container" id="logsContainer">
+                    <p class="log-entry">Sistema iniciado - Pronto para análise</p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p><i class="fas fa-info-circle"></i> Esta ferramenta é gratuita e de código aberto. Não garantimos 100% de sucesso na descriptografia.</p>
+        </footer>
+    </div>
+
+    <script src="crypto-js.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
