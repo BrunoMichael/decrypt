@@ -444,6 +444,10 @@ class WantToCryDecryptor {
         }
 
         this.isProcessing = true;
+        
+        // Limpar dados descriptografados anteriores
+        this.decryptedData = [];
+        
         this.logMessage('🆔 Iniciando descriptografia baseada em ID único...', 'info');
         this.logMessage(`ID único: ${this.uniqueID}`, 'info');
         this.logMessage(`Tox ID: ${this.toxID}`, 'info');
