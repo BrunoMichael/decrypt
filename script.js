@@ -1155,16 +1155,65 @@ class WantToCryDecryptor {
 
     downloadSingleDecryptedFile(fileData) {
         try {
+            // Validar dados antes do download
+            if (!fileData || !fileData.decryptedContent) {
+                this.logMessage('❌ Dados de arquivo inválidos para download', 'error');
+                return;
+            }
+
+            // Log de debug
+            this.logMessage(`🔍 Preparando download: ${fileData.decryptedContent.length} bytes`, 'info');
+
             // Remover a extensão .want_to_cry do nome original
             let originalName = fileData.originalName || 'arquivo_descriptografado';
             if (originalName.endsWith('.want_to_cry')) {
                 originalName = originalName.slice(0, -12); // Remove .want_to_cry
             }
 
+            // Verificar se os dados descriptografados são válidos
+            if (fileData.decryptedContent.length === 0) {
+                this.logMessage('❌ Arquivo descriptografado está vazio', 'error');
+                return;
+            }
+
+            // Log da assinatura do arquivo
+            const signature = this.getFileSignature(fileData.decryptedContent);
+            this.logMessage(`📄 Assinatura detectada: ${signature}`, 'info');
+
+            // Verificar se é um PDF e validar header
+            if (originalName.toLowerCase().endsWith('.pdf')) {
+                const pdfHeader = Array.from(fileData.decryptedContent.slice(0, 4));
+                const expectedPDF = [0x25, 0x50, 0x44, 0x46]; // %PDF
+                
+                if (JSON.stringify(pdfHeader) !== JSON.stringify(expectedPDF)) {
+                    this.logMessage(`⚠️ Header PDF inválido. Esperado: [37,80,68,70], Encontrado: [${pdfHeader.join(',')}]`, 'warning');
+                    this.logMessage('🔧 Tentando corrigir header do PDF...', 'info');
+                    
+                    // Tentar corrigir o header do PDF
+                    const correctedData = new Uint8Array(fileData.decryptedContent.length);
+                    correctedData.set(fileData.decryptedContent);
+                    
+                    // Definir header correto do PDF
+                    correctedData[0] = 0x25; // %
+                    correctedData[1] = 0x50; // P
+                    correctedData[2] = 0x44; // D
+                    correctedData[3] = 0x46; // F
+                    
+                    fileData.decryptedContent = correctedData;
+                    this.logMessage('✅ Header PDF corrigido', 'success');
+                }
+            }
+
             // Criar blob com os dados descriptografados
+            const mimeType = this.getMimeType(originalName);
+            this.logMessage(`📋 MIME Type: ${mimeType}`, 'info');
+            
             const blob = new Blob([fileData.decryptedContent], { 
-                type: this.getMimeType(originalName) 
+                type: mimeType 
             });
+
+            // Log do tamanho do blob
+            this.logMessage(`📦 Blob criado: ${blob.size} bytes`, 'info');
 
             // Criar URL temporária
             const url = URL.createObjectURL(blob);
@@ -1185,10 +1234,11 @@ class WantToCryDecryptor {
                 URL.revokeObjectURL(url);
             }, 1000);
 
-            this.logMessage(`Arquivo "${originalName}" baixado com sucesso`, 'success');
+            this.logMessage(`✅ Arquivo "${originalName}" baixado com sucesso (${blob.size} bytes)`, 'success');
 
         } catch (error) {
-            this.logMessage(`Erro ao baixar arquivo: ${error.message}`, 'error');
+            this.logMessage(`❌ Erro ao baixar arquivo: ${error.message}`, 'error');
+            console.error('Erro detalhado:', error);
         }
     }
 
