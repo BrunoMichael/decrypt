@@ -1,6 +1,6 @@
 {
   "name": "wanttocry-decryptor",
-  "version": "2.0.15",
+  "version": "2.0.16",
   "description": "Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry",
   "main": "start.js",
   "scripts": {
