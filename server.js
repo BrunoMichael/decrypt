@@ -480,10 +480,14 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
             const decryptedPath = path.join(tempDir, 'decrypted_file.pdf');
             fs.writeFileSync(decryptedPath, decryptedData);
             
+            console.log(`✅ Arquivo descriptografado salvo: ${decryptedPath}`);
+            
             // Validação adicional do PDF
             const pdfValidation = validatePDFStructure(decryptedData);
             successfulResult.pdfValidation = pdfValidation;
             successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+            
+            console.log(`📄 Validação PDF:`, pdfValidation);
         }
 
         res.json({
@@ -676,7 +680,8 @@ function validatePDFStructure(data) {
         version: 'unknown',
         pages: 0,
         hasXref: false,
-        hasTrailer: false
+        hasTrailer: false,
+        size: data.length
     };
     
     if (!isPDF(data)) {
@@ -691,16 +696,39 @@ function validatePDFStructure(data) {
         validation.version = versionMatch[1];
     }
     
-    // Contar páginas (aproximado)
-    const pageMatches = pdfString.match(/\/Type\s*\/Page[^s]/g);
-    if (pageMatches) {
-        validation.pages = pageMatches.length;
+    // Contar páginas (múltiplos métodos)
+    const pageMatches1 = pdfString.match(/\/Type\s*\/Page[^s]/g);
+    const pageMatches2 = pdfString.match(/\/Count\s+(\d+)/g);
+    const pageMatches3 = pdfString.match(/\/Kids\s*\[([^\]]+)\]/g);
+    
+    if (pageMatches1) {
+        validation.pages = Math.max(validation.pages, pageMatches1.length);
+    }
+    if (pageMatches2) {
+        const counts = pageMatches2.map(match => parseInt(match.match(/\d+/)[0]));
+        validation.pages = Math.max(validation.pages, Math.max(...counts));
+    }
+    if (pageMatches3) {
+        // Contar objetos nas arrays de Kids
+        pageMatches3.forEach(match => {
+            const kids = match.match(/\d+\s+\d+\s+R/g);
+            if (kids) {
+                validation.pages = Math.max(validation.pages, kids.length);
+            }
+        });
+    }
+    
+    // Se não encontrou páginas, assumir pelo menos 1 se é um PDF válido
+    if (validation.pages === 0 && isPDF(data)) {
+        validation.pages = 1;
     }
     
     // Verificar estrutura básica
     validation.hasXref = pdfString.includes('xref');
     validation.hasTrailer = pdfString.includes('trailer');
-    validation.isValid = validation.hasXref && validation.hasTrailer;
+    
+    // PDF é válido se tem cabeçalho correto e pelo menos uma estrutura básica
+    validation.isValid = isPDF(data) && (validation.hasXref || validation.hasTrailer || validation.pages > 0);
     
     return validation;
 }
