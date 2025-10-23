@@ -629,11 +629,32 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                 console.log(`   - Objetos de fonte: ${pdfValidation.contentAnalysis.fontObjects}`);
                 console.log(`   - Está vazio: ${pdfValidation.contentAnalysis.isEmpty ? 'Sim' : 'Não'}`);
                 
+                // Log de problemas específicos de texto
+                if (pdfValidation.contentAnalysis.textIssues && pdfValidation.contentAnalysis.textIssues.length > 0) {
+                    console.log(`⚠️ Problemas de texto detectados:`);
+                    pdfValidation.contentAnalysis.textIssues.forEach((issue, index) => {
+                        console.log(`   ${index + 1}. ${issue}`);
+                    });
+                }
+                
                 if (pdfValidation.contentAnalysis.extractedText.length > 0) {
                     console.log(`📝 Texto extraído (primeiras 3 linhas):`);
                     pdfValidation.contentAnalysis.extractedText.slice(0, 3).forEach((text, index) => {
                         console.log(`   ${index + 1}. "${text}"`);
                     });
+                } else if (pdfValidation.contentAnalysis.textStreams > 0) {
+                    console.log(`⚠️ Streams de texto encontrados mas nenhum texto extraído`);
+                    if (pdfValidation.contentAnalysis.streamDetails.length > 0) {
+                        console.log(`📄 Detalhes do primeiro stream:`);
+                        const firstStream = pdfValidation.contentAnalysis.streamDetails[0];
+                        console.log(`   - Tem fonte: ${firstStream.hasFont ? 'Sim' : 'Não'}`);
+                        console.log(`   - Tem posicionamento: ${firstStream.hasPosition ? 'Sim' : 'Não'}`);
+                        console.log(`   - Tem comandos de texto: ${firstStream.hasText ? 'Sim' : 'Não'}`);
+                        console.log(`   - Conteúdo de texto: ${firstStream.textContent.length} itens`);
+                        if (firstStream.rawContent) {
+                            console.log(`   - Conteúdo bruto (200 chars): ${firstStream.rawContent}`);
+                        }
+                    }
                 }
                 
                 // Sugestões específicas baseadas na análise
@@ -1541,31 +1562,71 @@ function analyzeContentDetails(content, analysis) {
         // Verificar streams de texto (BT...ET)
         const textStreams = content.match(/BT[\s\S]*?ET/g);
         if (textStreams) {
-            analysis.hasVisibleText = true;
             analysis.textStreams = textStreams.length;
             analysis.hasStreams = true;
-            analysis.contentType = 'text';
+            
+            let hasRealText = false;
+            let hasFont = false;
+            let hasPosition = false;
             
             // Extrair texto real dos streams
             textStreams.forEach((stream, index) => {
+                const streamHasFont = /\/F\d+/.test(stream);
+                const streamHasPosition = /\d+\s+\d+\s+Td/.test(stream);
+                const streamHasText = /\([^)]*\)\s*Tj/.test(stream);
+                
+                if (streamHasFont) hasFont = true;
+                if (streamHasPosition) hasPosition = true;
+                
                 const textMatches = stream.match(/\(([^)]*)\)\s*Tj/g);
+                let streamTextContent = [];
+                
                 if (textMatches) {
                     textMatches.forEach(match => {
                         const text = match.match(/\(([^)]*)\)/);
-                        if (text && text[1] && text[1].trim()) {
-                            analysis.extractedText.push(text[1]);
+                        if (text && text[1]) {
+                            const cleanText = text[1].trim();
+                            if (cleanText && cleanText.length > 0) {
+                                analysis.extractedText.push(cleanText);
+                                streamTextContent.push(cleanText);
+                                hasRealText = true;
+                            }
                         }
                     });
                 }
                 
                 analysis.streamDetails.push({
                     index: index + 1,
-                    hasFont: /\/F\d+/.test(stream),
-                    hasPosition: /\d+\s+\d+\s+Td/.test(stream),
-                    hasText: /\([^)]*\)\s*Tj/.test(stream),
-                    length: stream.length
+                    hasFont: streamHasFont,
+                    hasPosition: streamHasPosition,
+                    hasText: streamHasText,
+                    textContent: streamTextContent,
+                    length: stream.length,
+                    rawContent: stream.substring(0, 200) + (stream.length > 200 ? '...' : '')
                 });
             });
+            
+            // Determinar se realmente tem texto visível
+            analysis.hasVisibleText = hasRealText && hasFont && hasPosition;
+            
+            // Se tem comandos de texto mas não tem texto real, fonte ou posição
+            if (textStreams.length > 0 && !analysis.hasVisibleText) {
+                analysis.contentType = 'text_commands_only';
+                if (!hasRealText) {
+                    analysis.textIssues = analysis.textIssues || [];
+                    analysis.textIssues.push('Comandos de texto encontrados mas sem conteúdo legível');
+                }
+                if (!hasFont) {
+                    analysis.textIssues = analysis.textIssues || [];
+                    analysis.textIssues.push('Texto encontrado mas sem fonte definida');
+                }
+                if (!hasPosition) {
+                    analysis.textIssues = analysis.textIssues || [];
+                    analysis.textIssues.push('Texto encontrado mas sem posicionamento');
+                }
+            } else if (analysis.hasVisibleText) {
+                analysis.contentType = 'text';
+            }
         }
 
         // Verificar objetos de imagem
@@ -1601,12 +1662,22 @@ function analyzeContentDetails(content, analysis) {
 
         // Se não tem conteúdo visível mas tem streams, pode ser conteúdo binário
         if (!analysis.hasVisibleText && !analysis.hasImages && analysis.hasStreams) {
-            analysis.contentType = 'binary';
+            if (analysis.contentType !== 'text_commands_only') {
+                analysis.contentType = 'binary';
+            }
         }
 
         // Se não tem nada, está vazio
         if (analysis.isEmpty) {
             analysis.contentType = 'empty';
+        }
+
+        // Adicionar informações sobre problemas de texto ao log
+        if (analysis.textIssues && analysis.textIssues.length > 0) {
+            console.log(`⚠️ Problemas de texto identificados durante análise:`);
+            analysis.textIssues.forEach((issue, index) => {
+                console.log(`   ${index + 1}. ${issue}`);
+            });
         }
 
     } catch (error) {
@@ -1636,15 +1707,36 @@ function generateDiagnosis(contentAnalysis) {
         ];
     } else if (!contentAnalysis.hasVisibleText && !contentAnalysis.hasImages) {
         diagnosis.status = 'no_visible_content';
-        diagnosis.message = 'PDF tem estrutura válida mas não contém texto ou imagens visíveis';
-        diagnosis.severity = 'warning';
-        diagnosis.recommendations = [
-            'O conteúdo pode estar em formato binário não reconhecido',
-            'Fontes ou recursos necessários podem estar ausentes',
-            'O conteúdo pode estar em camadas ocultas ou com cor branca',
-            'Tente usar ferramentas especializadas de análise de PDF',
-            'Verifique se há objetos incorporados ou anexos no PDF'
-        ];
+        
+        if (contentAnalysis.contentType === 'text_commands_only') {
+            diagnosis.message = 'PDF tem comandos de texto mas não contém conteúdo visível devido a problemas de formatação';
+            diagnosis.severity = 'warning';
+            diagnosis.recommendations = [
+                'O PDF foi descriptografado corretamente mas tem problemas de formatação',
+                'Faltam definições de fonte (fontObjects: 0) - texto não pode ser renderizado',
+                'Comandos de posicionamento ou texto podem estar malformados',
+                'Tente abrir em diferentes visualizadores de PDF (Adobe Reader, Chrome, Firefox)',
+                'Use ferramentas de reparo de PDF como PDFtk ou Adobe Acrobat',
+                'O arquivo original pode ter tido problemas de formatação antes da criptografia'
+            ];
+            
+            if (contentAnalysis.textIssues) {
+                diagnosis.recommendations.unshift('Problemas específicos encontrados:');
+                contentAnalysis.textIssues.forEach(issue => {
+                    diagnosis.recommendations.push(`  - ${issue}`);
+                });
+            }
+        } else {
+            diagnosis.message = 'PDF tem estrutura válida mas não contém texto ou imagens visíveis';
+            diagnosis.severity = 'warning';
+            diagnosis.recommendations = [
+                'O conteúdo pode estar em formato binário não reconhecido',
+                'Fontes ou recursos necessários podem estar ausentes',
+                'O conteúdo pode estar em camadas ocultas ou com cor branca',
+                'Tente usar ferramentas especializadas de análise de PDF',
+                'Verifique se há objetos incorporados ou anexos no PDF'
+            ];
+        }
     } else if (contentAnalysis.hasVisibleText || contentAnalysis.hasImages) {
         diagnosis.status = 'success';
         diagnosis.message = 'PDF descriptografado com sucesso e contém conteúdo visível';
