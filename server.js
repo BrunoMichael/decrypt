@@ -484,14 +484,54 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                 console.log(`✅ Arquivo descriptografado salvo: ${decryptedPath}`);
                 console.log(`📊 Tamanho do arquivo: ${decryptedData.length} bytes`);
                 
-                // Validação adicional do PDF
-                const pdfValidation = validatePDFStructure(decryptedData);
+                // Validação inicial do PDF
+                let pdfValidation = validatePDFStructure(decryptedData);
+                let finalData = decryptedData;
+                
+                // Tentar reparar se houver problemas
+                if (pdfValidation.corruption.length > 0) {
+                    console.log(`🔧 Tentando reparar PDF...`);
+                    const repairResult = repairPDF(decryptedData);
+                    
+                    if (repairResult.repaired) {
+                        console.log(`✅ Reparos aplicados:`, repairResult.repairs);
+                        
+                        // Salvar versão reparada
+                        const repairedPath = path.join(tempDir, 'decrypted_file_repaired.pdf');
+                        fs.writeFileSync(repairedPath, repairResult.data);
+                        fs.writeFileSync(decryptedPath, repairResult.data); // Substituir original
+                        
+                        // Revalidar após reparo
+                        pdfValidation = validatePDFStructure(repairResult.data);
+                        finalData = repairResult.data;
+                        
+                        console.log(`📄 Validação após reparo:`, pdfValidation);
+                    } else {
+                        console.log(`❌ Não foi possível reparar automaticamente`);
+                    }
+                }
+                
                 successfulResult.pdfValidation = pdfValidation;
-                successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                
+                // Criar preview mais informativo
+                if (pdfValidation.corruption.length > 0) {
+                    successfulResult.preview = `PDF com problemas - ${pdfValidation.pages} página(s), versão ${pdfValidation.version} (${pdfValidation.corruption.join(', ')})`;
+                } else {
+                    successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                }
                 
                 console.log(`📄 Validação PDF:`, pdfValidation);
                 console.log(`🔑 Método usado: ${successfulResult.method}`);
                 console.log(`🗝️ Chave: ${successfulResult.keyUsed}`);
+                
+                // Log detalhado sobre problemas encontrados
+                if (pdfValidation.corruption.length > 0) {
+                    console.log(`⚠️ Problemas detectados no PDF:`);
+                    pdfValidation.corruption.forEach((problem, index) => {
+                        console.log(`   ${index + 1}. ${problem}`);
+                    });
+                    console.log(`💡 Sugestão: Tente abrir o PDF em diferentes visualizadores (Adobe Reader, Chrome, Firefox)`);
+                }
             } catch (error) {
                 console.error(`❌ Erro ao salvar arquivo: ${error.message}`);
             }
@@ -681,63 +721,191 @@ function isPDF(data) {
 }
 
 // Função para validar estrutura do PDF
+// Função para tentar reparar PDF corrompido
+function repairPDF(data) {
+    try {
+        let content = data.toString('binary');
+        let repaired = false;
+        const repairs = [];
+
+        // Reparar cabeçalho se necessário
+        if (!content.startsWith('%PDF')) {
+            // Procurar por cabeçalho PDF em posições próximas
+            const pdfMatch = content.match(/%PDF-\d+\.\d+/);
+            if (pdfMatch) {
+                const pdfIndex = content.indexOf(pdfMatch[0]);
+                content = content.substring(pdfIndex);
+                repaired = true;
+                repairs.push('Cabeçalho PDF reposicionado');
+            }
+        }
+
+        // Garantir que termina com %%EOF
+        if (!content.trim().endsWith('%%EOF')) {
+            if (content.includes('%%EOF')) {
+                // %%EOF existe mas não está no final - mover para o final
+                const eofIndex = content.lastIndexOf('%%EOF');
+                content = content.substring(0, eofIndex + 5);
+                repaired = true;
+                repairs.push('%%EOF reposicionado para o final');
+            } else {
+                // Adicionar %%EOF se não existir
+                content += '\n%%EOF';
+                repaired = true;
+                repairs.push('%%EOF adicionado');
+            }
+        }
+
+        // Remover caracteres nulos excessivos
+        const originalLength = content.length;
+        content = content.replace(/\0+/g, '');
+        if (content.length !== originalLength) {
+            repaired = true;
+            repairs.push('Caracteres nulos removidos');
+        }
+
+        // Verificar e corrigir estrutura básica
+        if (!content.includes('xref') && !content.includes('trailer')) {
+            // Tentar adicionar estrutura mínima
+            const objCount = (content.match(/\d+\s+\d+\s+obj/g) || []).length;
+            if (objCount > 0) {
+                const xrefPos = content.length;
+                content += `\nxref\n0 ${objCount + 1}\n`;
+                for (let i = 0; i <= objCount; i++) {
+                    content += `${i.toString().padStart(10, '0')} ${i === 0 ? '65535' : '00000'} ${i === 0 ? 'f' : 'n'} \n`;
+                }
+                content += `trailer\n<<\n/Size ${objCount + 1}\n>>\nstartxref\n${xrefPos}\n%%EOF`;
+                repaired = true;
+                repairs.push('Estrutura xref/trailer adicionada');
+            }
+        }
+
+        return {
+            repaired,
+            repairs,
+            data: repaired ? Buffer.from(content, 'binary') : data
+        };
+    } catch (error) {
+        console.error('Erro no reparo do PDF:', error);
+        return {
+            repaired: false,
+            repairs: [`Erro no reparo: ${error.message}`],
+            data
+        };
+    }
+}
+
 function validatePDFStructure(data) {
-    const validation = {
+    const result = {
         isValid: false,
         version: 'unknown',
         pages: 0,
         hasXref: false,
         hasTrailer: false,
-        size: data.length
+        hasEOF: false,
+        hasStartxref: false,
+        endsCorrectly: false,
+        objectCount: 0,
+        size: data.length,
+        corruption: []
     };
-    
-    if (!isPDF(data)) {
-        return validation;
+
+    try {
+        const content = data.toString('binary');
+        
+        // Verificar cabeçalho PDF
+        if (!content.startsWith('%PDF')) {
+            result.corruption.push('Cabeçalho PDF inválido');
+            return result;
+        }
+
+        // Extrair versão
+        const versionMatch = content.match(/%PDF-(\d+\.\d+)/);
+        if (versionMatch) {
+            result.version = versionMatch[1];
+        }
+
+        // Verificar estruturas básicas
+        result.hasXref = content.includes('xref');
+        result.hasTrailer = content.includes('trailer');
+        result.hasEOF = content.includes('%%EOF');
+        result.hasStartxref = content.includes('startxref');
+        result.endsCorrectly = content.trim().endsWith('%%EOF');
+
+        // Contar objetos PDF
+        const objMatches = content.match(/\d+\s+\d+\s+obj/g);
+        result.objectCount = objMatches ? objMatches.length : 0;
+
+        // Contar páginas - múltiplos métodos
+        let pageCount = 0;
+        
+        // Método 1: Contar /Type/Page
+        const pageMatches = content.match(/\/Type\s*\/Page[^s]/g);
+        if (pageMatches) {
+            pageCount = Math.max(pageCount, pageMatches.length);
+        }
+        
+        // Método 2: Procurar /Count
+        const countMatch = content.match(/\/Count\s+(\d+)/);
+        if (countMatch) {
+            pageCount = Math.max(pageCount, parseInt(countMatch[1]));
+        }
+        
+        // Método 3: Contar arrays /Kids
+        const kidsMatches = content.match(/\/Kids\s*\[[^\]]*\]/g);
+        if (kidsMatches) {
+            kidsMatches.forEach(kids => {
+                const refs = kids.match(/\d+\s+\d+\s+R/g);
+                if (refs) {
+                    pageCount = Math.max(pageCount, refs.length);
+                }
+            });
+        }
+        
+        result.pages = pageCount;
+
+        // Detectar problemas de corrupção
+        if (!result.hasEOF) {
+            result.corruption.push('Falta %%EOF no final');
+        }
+        if (!result.endsCorrectly) {
+            result.corruption.push('Arquivo não termina corretamente com %%EOF');
+        }
+        if (!result.hasXref && !result.hasTrailer) {
+            result.corruption.push('Falta estrutura xref/trailer');
+        }
+        if (result.objectCount === 0) {
+            result.corruption.push('Nenhum objeto PDF encontrado');
+        }
+        if (pageCount === 0) {
+            result.corruption.push('Nenhuma página detectada');
+        }
+
+        // Para PDFs grandes sem páginas detectadas, assumir pelo menos 1 se tem objetos
+        if (pageCount === 0 && result.objectCount > 0 && data.length > 100000) {
+            result.pages = 1;
+            result.corruption.push('Páginas não detectadas automaticamente (PDF grande)');
+        }
+
+        // Validação mais rigorosa para PDFs grandes
+        if (data.length > 100000) {
+            // PDF grande deve ter estrutura completa
+            result.isValid = content.startsWith('%PDF') && 
+                           result.hasEOF && 
+                           (result.hasXref || result.hasTrailer) &&
+                           result.objectCount > 0;
+        } else {
+            // PDF pequeno - validação mais flexível
+            result.isValid = content.startsWith('%PDF') && 
+                           (result.hasXref || result.hasTrailer || result.pages > 0);
+        }
+
+    } catch (error) {
+        console.error('Erro na validação PDF:', error);
+        result.corruption.push(`Erro de análise: ${error.message}`);
     }
-    
-    const pdfString = data.toString('latin1');
-    
-    // Extrair versão do PDF
-    const versionMatch = pdfString.match(/%PDF-(\d\.\d)/);
-    if (versionMatch) {
-        validation.version = versionMatch[1];
-    }
-    
-    // Contar páginas (múltiplos métodos)
-    const pageMatches1 = pdfString.match(/\/Type\s*\/Page[^s]/g);
-    const pageMatches2 = pdfString.match(/\/Count\s+(\d+)/g);
-    const pageMatches3 = pdfString.match(/\/Kids\s*\[([^\]]+)\]/g);
-    
-    if (pageMatches1) {
-        validation.pages = Math.max(validation.pages, pageMatches1.length);
-    }
-    if (pageMatches2) {
-        const counts = pageMatches2.map(match => parseInt(match.match(/\d+/)[0]));
-        validation.pages = Math.max(validation.pages, Math.max(...counts));
-    }
-    if (pageMatches3) {
-        // Contar objetos nas arrays de Kids
-        pageMatches3.forEach(match => {
-            const kids = match.match(/\d+\s+\d+\s+R/g);
-            if (kids) {
-                validation.pages = Math.max(validation.pages, kids.length);
-            }
-        });
-    }
-    
-    // Se não encontrou páginas, assumir pelo menos 1 se é um PDF válido
-    if (validation.pages === 0 && isPDF(data)) {
-        validation.pages = 1;
-    }
-    
-    // Verificar estrutura básica
-    validation.hasXref = pdfString.includes('xref');
-    validation.hasTrailer = pdfString.includes('trailer');
-    
-    // PDF é válido se tem cabeçalho correto e pelo menos uma estrutura básica
-    validation.isValid = isPDF(data) && (validation.hasXref || validation.hasTrailer || validation.pages > 0);
-    
-    return validation;
+
+    return result;
 }
 
 // Rota para download do arquivo descriptografado
