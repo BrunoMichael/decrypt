@@ -1,0 +1,35 @@
+# Dependências de desenvolvimento
+node_modules/
+
+# Arquivos de desenvolvimento
+src/
+public/
+
+# Arquivos de configuração local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.eslintcache
+
+# Arquivos do editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos temporários
+.DS_Store
+Thumbs.db
+
+# Arquivos de teste
+coverage/
+*.test.js
+*.spec.js
