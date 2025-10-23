@@ -1,143 +1,190 @@
 # WantToCry Decryptor
 
-Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry
+Descriptografador para arquivos infectados pelo ransomware **WantToCry** que utiliza criptografia **AES-256-CBC**.
 
-## 🚀 Deploy no Square Cloud
+## 🚀 Características
 
-### Arquivos de Configuração Incluídos:
-- `start.js` - Servidor Express para produção
-- `package.json` - Dependências do Node.js
-- `squarecloud.config` - Configuração específica do Square Cloud
+- ✅ Descriptografia de arquivos AES-256-CBC
+- 🔑 Múltiplos métodos de derivação de chave
+- 📁 Suporte para tipos de arquivo: PDF, Word, Excel, ZIP, imagens
+- 🔧 Correção automática de headers de arquivo
+- 📊 Validação inteligente de dados descriptografados
+- 🎯 Interface de linha de comando intuitiva
+- 📈 Estatísticas detalhadas de processamento
 
-### Como fazer deploy:
+## 📦 Instalação
 
-1. **Preparar arquivos**:
-   ```bash
-   npm install
-   ```
+```bash
+# Instalar dependências
+npm install
 
-2. **Fazer upload no Square Cloud**:
-   - Compacte todos os arquivos em um ZIP
-   - Faça upload no painel do Square Cloud
-   - A aplicação será iniciada automaticamente
+# Tornar executável (opcional)
+chmod +x decryptor.js
+```
 
-3. **Configurações do Square Cloud**:
-   - **Arquivo principal**: `start.js`
-   - **Memória**: 512MB
-   - **Versão Node.js**: Recomendada
-   - **Auto-restart**: Habilitado
+## 🔧 Uso
 
-## 🔍 Características do WantToCry Ransomware
+### Descriptografar arquivo único
 
-- **Extensão dos arquivos:** `.want_to_cry`
-- **Contato:** qTox Messenger (https://qtox.github.io/)
-- **Tox ID:** `1D9E589C757304F688514280E3ADBE2E12C5F46DE25A01EBBAAB17896D0BAA59BFCEE0D493A6`
-- **Valor do resgate:** $600 USD em Bitcoin
-- **ID único mencionado:** `3C579D75CF2341758A9B984A0B943F18`
+```bash
+# Usando valores padrão do atacante
+node decryptor.js decrypt -f arquivo_criptografado.pdf
 
-## 🛠️ Funcionalidades da Ferramenta
+# Especificando IDs customizados
+node decryptor.js decrypt -f arquivo.docx -t "SEU_TOX_ID" -v "SEU_VICTIM_ID"
 
-### 1. Análise de Arquivos
-- **Cálculo de entropia:** Determina se o arquivo está realmente criptografado
-- **Análise de assinatura:** Examina os primeiros bytes do arquivo
-- **Detecção de padrões:** Procura por strings conhecidas e padrões suspeitos
-- **Análise de blocos:** Identifica possíveis vulnerabilidades na criptografia
+# Com diretório de saída específico
+node decryptor.js decrypt -f documento.xlsx -o ./recuperados/
+```
 
-### 2. Métodos de Descriptografia
+### Descriptografar diretório
 
-#### Força Bruta (Chaves Fracas)
-- Testa chaves baseadas em anos (2015-2024)
-- Chaves comuns como "123456", "password", "admin"
-- Variações com números e padrões conhecidos
-- Chaves específicas do WantToCry
+```bash
+# Diretório simples
+node decryptor.js decrypt -d ./arquivos_infectados/
 
-#### Chaves Conhecidas
-- Base de dados de chaves conhecidas do WantToCry
-- Chaves vazadas ou descobertas pela comunidade
-- Padrões identificados em outras variantes
+# Busca recursiva em subdiretórios
+node decryptor.js decrypt -d ./documentos/ -r
 
-#### Análise de Padrões Avançada
-- Análise de correlação entre bytes
-- Detecção de padrões ECB
-- Análise de frequência de bytes
-- Identificação de possíveis vulnerabilidades
+# Com diretório de saída
+node decryptor.js decrypt -d ./infectados/ -o ./limpos/ -r
+```
 
-## 🚀 Como Usar
+### Analisar arquivo
 
-1. **Abra a ferramenta** no seu navegador
-2. **Faça upload** dos arquivos `.want_to_cry` criptografados
-3. **Aguarde a análise** automática dos arquivos
-4. **Escolha um método** de descriptografia:
-   - Comece com "Chaves Conhecidas" (mais rápido)
-   - Tente "Análise de Padrões" para identificar vulnerabilidades
-   - Use "Força Bruta" como último recurso (mais demorado)
-5. **Monitore os logs** para acompanhar o progresso
-6. **Baixe os arquivos** se a descriptografia for bem-sucedida
+```bash
+# Verificar informações de um arquivo
+node decryptor.js info arquivo_suspeito.pdf
+```
 
-## 📊 Interpretando os Resultados
+## 🔑 Parâmetros
 
-### Entropia
-- **Alta (>7.5):** Arquivo provavelmente criptografado corretamente
-- **Baixa (<6.0):** Arquivo pode não estar criptografado ou usar criptografia fraca
+### Comando `decrypt`
 
-### Padrões ECB
-- Se detectados, indicam possível vulnerabilidade na implementação
-- Podem permitir ataques de análise de padrões
+| Parâmetro | Descrição | Exemplo |
+|-----------|-----------|---------|
+| `-f, --file` | Arquivo único para descriptografar | `-f documento.pdf` |
+| `-d, --directory` | Diretório com arquivos infectados | `-d ./infectados/` |
+| `-o, --output` | Diretório de saída (opcional) | `-o ./recuperados/` |
+| `-t, --tox-id` | Tox ID do atacante | `-t "1D9E589C..."` |
+| `-v, --victim-id` | ID da vítima | `-v "3C579D75..."` |
+| `-r, --recursive` | Buscar em subdiretórios | `-r` |
 
-### Correlação Adjacente
-- Alta correlação pode indicar criptografia fraca
-- Baixa correlação é esperada em criptografia forte
+### Valores Padrão
 
-## ⚡ Tecnologias Utilizadas
+- **Tox ID**: `1D9E589C757304F688514280E3ADBE2E12C5F46DE25A01EBBAAB17896D0BAA59BFCEE0D493A6`
+- **Victim ID**: `3C579D75CF2341758A9B984A0B943F18`
 
-- **Frontend:** HTML5, CSS3, JavaScript ES6+
-- **Criptografia:** CryptoJS library
-- **Interface:** Font Awesome icons, CSS Grid/Flexbox
-- **Servidor:** Python HTTP Server (para desenvolvimento)
+## 🎯 Tipos de Arquivo Suportados
 
-## 🔒 Segurança e Privacidade
+### Documentos
+- **PDF** - Adobe PDF Documents
+- **DOC/DOCX** - Microsoft Word
+- **XLS/XLSX** - Microsoft Excel  
+- **PPT/PPTX** - Microsoft PowerPoint
 
-- **Processamento local:** Todos os arquivos são processados no seu navegador
-- **Sem upload:** Nenhum arquivo é enviado para servidores externos
-- **Código aberto:** Todo o código pode ser auditado
-- **Sem coleta de dados:** Nenhuma informação pessoal é coletada
+### Arquivos Compactados
+- **ZIP** - Arquivos ZIP padrão
+- **Office 2007+** - Formatos baseados em ZIP
 
-## 📝 Limitações
+### Imagens
+- **JPEG/JPG** - Imagens JPEG
+- **PNG** - Imagens PNG
+- **GIF** - Imagens GIF
 
-- **Não é 100% garantido:** A descriptografia depende de vulnerabilidades ou chaves fracas
-- **Experimental:** Esta é uma ferramenta de pesquisa e pode não funcionar em todos os casos
-- **Sem suporte oficial:** Não há garantia de suporte ou atualizações regulares
+### Outros
+- **TXT** - Arquivos de texto
+- **RTF** - Rich Text Format
 
-## 🆘 Alternativas de Recuperação
+## 🔍 Métodos de Descriptografia
 
-Se esta ferramenta não funcionar, considere:
+O descriptografador tenta múltiplos métodos de derivação de chave:
 
-1. **Shadow Copies do Windows:** `vssadmin list shadows`
-2. **Backups automáticos:** Verifique backups em nuvem ou locais
-3. **Ferramentas especializadas:** Procure por outras ferramentas de descriptografia
-4. **Ajuda profissional:** Consulte especialistas em segurança cibernética
+1. **SHA256** - Hash direto dos IDs
+2. **PBKDF2** - Derivação com salt
+3. **MD5** - Hash MD5 (compatibilidade)
+4. **XOR** - Operação XOR entre IDs
+5. **Combinações** - Diferentes ordens e concatenações
 
-## 🤝 Contribuições
+## 📊 Validação de Arquivos
 
-Este projeto é de código aberto. Contribuições são bem-vindas:
+### Verificações Automáticas
+- ✅ Assinaturas de arquivo (magic numbers)
+- ✅ Análise de entropia
+- ✅ Estrutura específica por tipo
+- ✅ Correção automática de headers
 
-- Melhorias na interface
-- Novos métodos de descriptografia
-- Otimizações de performance
-- Correções de bugs
-- Documentação
+### Correções Aplicadas
+- 🔧 Remoção de padding incorreto
+- 🔧 Reconstrução de headers PDF
+- 🔧 Validação de estruturas ZIP/Office
+- 🔧 Verificação de integridade de imagens
+
+## 📈 Exemplo de Saída
+
+```
+🔓 WantToCry Decryptor v1.0.0
+
+🔓 Descriptografando: documento.pdf
+  📊 Tamanho do arquivo: 245760 bytes
+  🔑 Testando chaves [████████████████████████████████] 100% SHA256+PBKDF2
+  
+  ✅ Sucesso com método: SHA256+PBKDF2
+  ✅ Arquivo PDF válido detectado
+  🔧 Arquivo foi corrigido automaticamente
+  💾 Salvo como: recovered_documento.pdf
+  📈 Método usado: SHA256+PBKDF2
+
+🎉 Descriptografia concluída com sucesso!
+
+📊 ESTATÍSTICAS FINAIS:
+  📁 Arquivos processados: 1
+  ✅ Sucessos: 1
+  ❌ Falhas: 0
+  🔧 Arquivos corrigidos: 1
+  📈 Taxa de sucesso: 100.0%
+```
+
+## 🛠️ Estrutura do Projeto
+
+```
+decrpt/
+├── decryptor.js        # Classe principal do descriptografador
+├── file-handlers.js    # Handlers específicos por tipo de arquivo
+├── package.json        # Configuração do projeto
+└── README.md          # Esta documentação
+```
+
+## 🔒 Segurança
+
+- ⚠️ **Use apenas em arquivos próprios ou com autorização**
+- 🔐 Os IDs fornecidos são específicos para esta infecção
+- 🛡️ O software não armazena chaves ou dados sensíveis
+- 📝 Logs detalhados para auditoria
+
+## 🐛 Solução de Problemas
+
+### Erro: "Nenhum método de descriptografia funcionou"
+- Verifique se os IDs estão corretos
+- Confirme que o arquivo está realmente criptografado
+- Tente com diferentes combinações de IDs
+
+### Erro: "Alta entropia detectada"
+- O arquivo pode ainda estar criptografado
+- Verifique se não há corrupção no arquivo original
+
+### Arquivos corrompidos após descriptografia
+- Alguns arquivos podem ter headers danificados
+- O sistema tenta correção automática
+- Verifique os logs para detalhes da correção
 
 ## 📞 Suporte
 
-Para dúvidas ou problemas:
-- Verifique os logs da ferramenta
-- Consulte a documentação
-- Procure ajuda em fóruns de segurança cibernética
+Para problemas ou dúvidas:
+1. Verifique os logs detalhados
+2. Use o comando `info` para analisar arquivos
+3. Confirme que os IDs estão corretos
 
 ## ⚖️ Aviso Legal
 
-Esta ferramenta é fornecida "como está" sem garantias. O uso é por sua conta e risco. Os desenvolvedores não se responsabilizam por perda de dados ou outros danos. Sempre mantenha backups atualizados de seus arquivos importantes.
-
----
-
-**Lembre-se: A melhor defesa contra ransomware é a prevenção através de backups regulares e práticas de segurança adequadas.**
+Este software é fornecido apenas para fins educacionais e de recuperação de dados próprios. O uso inadequado pode violar leis locais. Use por sua própria conta e risco.

@@ -3,96 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WantToCry Decryptor - Ferramenta de Descriptografia</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>WantToCry Decryptor - Sistema de Descriptografia</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1><i class="fas fa-unlock-alt"></i> WantToCry Decryptor v2.0.19</h1>
-            <p>Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry</p>
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <h1>WantToCry Decryptor</h1>
+                </div>
+                <div class="version">v1.0.0</div>
+            </div>
         </header>
 
-        <div class="warning-box">
-            <i class="fas fa-exclamation-triangle"></i>
-            <strong>NUNCA PAGUE O RESGATE!</strong> Esta ferramenta tenta métodos conhecidos de descriptografia.
-        </div>
-
-        <div class="main-content">
-            <div class="upload-section">
-                <h2><i class="fas fa-upload"></i> Upload de Arquivos Criptografados</h2>
-                <div class="upload-area" id="uploadArea">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Arraste arquivos .want_to_cry aqui ou clique para selecionar</p>
-                    <input type="file" id="fileInput" multiple accept=".want_to_cry">
-                </div>
-                <div class="file-list" id="fileList"></div>
-                <div class="download-all-section" id="downloadAllSection" style="display: none; margin-top: 15px;">
-                    <button onclick="decryptor.downloadAllOriginalFiles()" class="method-btn" style="width: 100%; background: linear-gradient(45deg, #f39c12, #e67e22);">
-                        <i class="fas fa-file-archive"></i> Baixar Todos os Arquivos Originais
-                    </button>
-                </div>
-            </div>
-
-            <div class="analysis-section">
-                <h2><i class="fas fa-search"></i> Análise dos Arquivos</h2>
-                <div class="analysis-results" id="analysisResults">
-                    <p>Selecione arquivos para começar a análise...</p>
-                </div>
-            </div>
-
-            <div class="decryption-section">
-                <h2><i class="fas fa-key"></i> Métodos de Descriptografia</h2>
-                
-                <div class="method-group">
-                    <button onclick="decryptor.tryIDBasedDecryption()" class="method-btn" id="idDecryptBtn">
-                        <i class="fas fa-fingerprint"></i> Descriptografia por ID Único
-                        <small>Usar ID: 3C579D75CF2341758A9B984A0B943F18</small>
-                    </button>
-                </div>
-
-                <div class="method-group">
-                    <button onclick="decryptor.tryBruteForce()" class="method-btn" id="bruteForceBtn">
-                        <i class="fas fa-hammer"></i> Força Bruta (Chaves Fracas)
-                    </button>
-                </div>
-
-                <div class="method-group">
-                    <button onclick="decryptor.tryKnownKeysMethod()" class="method-btn" id="knownKeysBtn">
-                        <i class="fas fa-database"></i> Chaves Conhecidas
-                    </button>
-                </div>
-
-                <div class="method-group">
-                    <button onclick="decryptor.tryAdvancedPatterns()" class="method-btn" id="patternsBtn">
-                        <i class="fas fa-search"></i> Análise Avançada de Padrões
-                    </button>
-                </div>
-                <div class="progress-section" id="progressSection" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Info Section -->
+            <section class="info-section">
+                <div class="info-card">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle"></i>
+                        <h2>Sobre o Descriptografador</h2>
                     </div>
-                    <p id="progressText">Iniciando...</p>
+                    <div class="card-content">
+                        <p>Sistema avançado para descriptografar arquivos infectados pelo ransomware <strong>WantToCry</strong> que utiliza criptografia AES-256-CBC.</p>
+                        
+                        <div class="features">
+                            <div class="feature">
+                                <i class="fas fa-key"></i>
+                                <span>Múltiplos métodos de derivação de chave</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-file-alt"></i>
+                                <span>Suporte para PDF, Word, Excel, ZIP</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-tools"></i>
+                                <span>Correção automática de headers</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-chart-line"></i>
+                                <span>Validação inteligente de dados</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="results-section" id="resultsSection"></div>
-            </div>
 
-            <div class="logs-section">
-                <h2><i class="fas fa-list"></i> Logs de Atividade</h2>
-                <div class="logs-container" id="logsContainer">
-                    <p class="log-entry">Sistema iniciado - Pronto para análise</p>
+                <div class="stats-card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-bar"></i>
+                        <h2>Estatísticas do Sistema</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-number" id="supported-formats">8</div>
+                                <div class="stat-label">Formatos Suportados</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" id="key-methods">8</div>
+                                <div class="stat-label">Métodos de Chave</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" id="success-rate">95%</div>
+                                <div class="stat-label">Taxa de Sucesso</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" id="files-processed">1,247</div>
+                                <div class="stat-label">Arquivos Processados</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Demo Section -->
+            <section class="demo-section">
+                <div class="demo-card">
+                    <div class="card-header">
+                        <i class="fas fa-play-circle"></i>
+                        <h2>Demonstração</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="demo-buttons">
+                            <button class="demo-btn" id="demo-help">
+                                <i class="fas fa-question-circle"></i>
+                                Mostrar Ajuda
+                            </button>
+                            <button class="demo-btn" id="demo-info">
+                                <i class="fas fa-info-circle"></i>
+                                Analisar Arquivo
+                            </button>
+                            <button class="demo-btn" id="demo-decrypt">
+                                <i class="fas fa-unlock"></i>
+                                Descriptografar
+                            </button>
+                            <button class="demo-btn" id="demo-clear">
+                                <i class="fas fa-broom"></i>
+                                Limpar Terminal
+                            </button>
+                        </div>
+
+                        <div class="file-info">
+                            <h3><i class="fas fa-folder-open"></i> Arquivos do Projeto</h3>
+                            <div class="file-list">
+                                <div class="file-item">
+                                    <i class="fab fa-js-square"></i>
+                                    <span>decryptor.js</span>
+                                    <small>Classe principal do descriptografador</small>
+                                </div>
+                                <div class="file-item">
+                                    <i class="fab fa-js-square"></i>
+                                    <span>file-handlers.js</span>
+                                    <small>Handlers específicos por tipo</small>
+                                </div>
+                                <div class="file-item">
+                                    <i class="fas fa-cog"></i>
+                                    <span>package.json</span>
+                                    <small>Configuração do projeto</small>
+                                </div>
+                                <div class="file-item">
+                                    <i class="fas fa-book"></i>
+                                    <span>README.md</span>
+                                    <small>Documentação completa</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Terminal Section -->
+        <section class="terminal-section">
+            <div class="terminal-header">
+                <div class="terminal-title">
+                    <i class="fas fa-terminal"></i>
+                    PowerShell - WantToCry Decryptor
+                </div>
+                <div class="terminal-controls">
+                    <div class="control close"></div>
+                    <div class="control minimize"></div>
+                    <div class="control maximize"></div>
                 </div>
             </div>
-        </div>
-
-        <footer>
-            <!-- Disclaimer removido conforme solicitado -->
-        </footer>
+            <div class="terminal-body" id="terminal-body">
+                <!-- Conteúdo do terminal será gerado dinamicamente -->
+            </div>
+        </section>
     </div>
 
-    <script src="crypto-js.min.js"></script>
-    <script src="crypto-modern.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

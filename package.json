@@ -1,38 +1,34 @@
 {
   "name": "wanttocry-decryptor",
-  "version": "2.0.19",
-  "description": "Ferramenta gratuita para análise e descriptografia de arquivos .want_to_cry",
-  "main": "start.js",
+  "version": "1.0.0",
+  "description": "Descriptografador para arquivos infectados pelo ransomware WantToCry",
+  "main": "server.js",
   "scripts": {
-    "start": "node start.js",
-    "dev": "node start.js",
-    "test": "echo \"No tests specified\" && exit 0",
-    "version-patch": "node version-bump.js patch --push",
-    "version-minor": "node version-bump.js minor --push",
-    "version-major": "node version-bump.js major --push",
-    "version-patch-local": "node version-bump.js patch",
-    "version-minor-local": "node version-bump.js minor",
-    "version-major-local": "node version-bump.js major",
-    "commit": "npm run version-patch && git add . && git commit -m \"v$(node -p \"require('./package.json').version\"): Atualização automática\""
+    "start": "node server.js",
+    "decrypt": "node decryptor.js decrypt",
+    "test": "node -c decryptor.js && node -c file-handlers.js",
+    "web": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [
     "decryption",
     "ransomware",
-    "security",
-    "crypto",
-    "wanttocry"
+    "wanttocry",
+    "aes-256-cbc",
+    "recovery"
   ],
-  "author": "Bruno Michael",
+  "author": "WantToCry Recovery Tool",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2"
+    "archiver": "^6.0.1",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "progress": "^2.0.3",
+    "yauzl": "^2.10.0"
   },
   "engines": {
     "node": ">=14.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/BrunoMichael/decrypt.git"
-  },
-  "homepage": "https://github.com/BrunoMichael/decrypt#readme"
+  }
 }

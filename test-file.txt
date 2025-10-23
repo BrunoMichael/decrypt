@@ -1,0 +1,12 @@
+Este é um arquivo de teste para demonstrar o WantToCry Decryptor.
+
+O arquivo contém texto simples em português para testar a funcionalidade
+de análise de entropia e detecção de tipo de arquivo.
+
+Características deste arquivo:
+- Baixa entropia (texto legível)
+- Caracteres principalmente ASCII
+- Estrutura de texto simples
+
+Este arquivo NÃO está criptografado e serve apenas para demonstração
+das capacidades de análise do descriptografador.
