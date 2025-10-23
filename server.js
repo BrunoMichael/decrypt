@@ -199,9 +199,9 @@ class WebServer {
     }
 
     async handleStaticRequest(req, res, pathname) {
-        // Redirecionar root para index.html
+        // Redirecionar root para decrypt.html
         if (pathname === '/') {
-            pathname = '/index.html';
+            pathname = '/decrypt.html';
         }
 
         const filePath = path.join(__dirname, pathname);
