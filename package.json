@@ -1,37 +1,30 @@
 {
-  "name": "wannacry-recovery-tool",
+  "name": "wanttocry-analyzer",
   "version": "1.0.0",
-  "description": "Ferramenta moderna para análise e recuperação de arquivos afetados pelo ransomware WannaCry",
+  "description": "Ferramenta web para análise de arquivos criptografados pelo ransomware WantToCry",
+  "main": "server.js",
   "private": true,
   "dependencies": {
-    "@tailwindcss/forms": "^0.5.7",
-    "@types/crypto-js": "^4.2.1",
-    "@types/file-saver": "^2.0.7",
-    "@types/jszip": "^3.4.1",
-    "@types/node": "^20.10.0",
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
-    "autoprefixer": "^10.4.16",
-    "crypto-js": "^4.2.0",
-    "file-saver": "^2.0.5",
-    "jszip": "^3.10.1",
-    "lucide-react": "^0.294.0",
-    "postcss": "^8.4.32",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.3.0",
+    "@testing-library/user-event": "^13.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-dropzone": "^14.2.3",
     "react-scripts": "5.0.1",
-    "serve": "^14.2.5",
-    "tailwindcss": "^3.3.6",
-    "typescript": "^4.9.5",
-    "web-vitals": "^3.5.0"
+    "web-vitals": "^2.1.4",
+    "crypto-js": "^4.1.1",
+    "file-saver": "^2.0.5"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "react-start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "web": "npm run build && npx serve -s build -l 80"
+    "web": "react-scripts start"
   },
   "eslintConfig": {
     "extends": [

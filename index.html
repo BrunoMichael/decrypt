@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Criptografia - WantToCry Decrypt Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔓 Analisador de Criptografia</h1>
+            <p>Ferramenta para análise de arquivos criptografados pelo WantToCry</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="upload-box">
+                <h2>📁 Arquivo Original (Não Criptografado)</h2>
+                <div class="drop-zone" id="originalDrop">
+                    <input type="file" id="originalFile" accept="*/*">
+                    <label for="originalFile">
+                        <div class="upload-icon">📄</div>
+                        <p>Clique ou arraste o arquivo original aqui</p>
+                        <small>Qualquer tipo de arquivo</small>
+                    </label>
+                </div>
+                <div class="file-info" id="originalInfo"></div>
+            </div>
+
+            <div class="upload-box">
+                <h2>🔒 Arquivo Criptografado</h2>
+                <div class="drop-zone" id="encryptedDrop">
+                    <input type="file" id="encryptedFile" accept="*/*">
+                    <label for="encryptedFile">
+                        <div class="upload-icon">🔐</div>
+                        <p>Clique ou arraste o arquivo criptografado aqui</p>
+                        <small>Arquivo .want_to_cry ou similar</small>
+                    </label>
+                </div>
+                <div class="file-info" id="encryptedInfo"></div>
+            </div>
+        </div>
+
+        <div class="analysis-section">
+            <button id="analyzeBtn" class="analyze-btn" disabled>
+                🔍 Analisar Arquivos
+            </button>
+        </div>
+
+        <div class="results-section" id="results" style="display: none;">
+            <h2>📊 Resultados da Análise</h2>
+            
+            <div class="result-grid">
+                <div class="result-card">
+                    <h3>🧮 Análise de Entropia</h3>
+                    <div id="entropyResults"></div>
+                </div>
+
+                <div class="result-card">
+                    <h3>🔢 Análise de Bytes</h3>
+                    <div id="byteResults"></div>
+                </div>
+
+                <div class="result-card">
+                    <h3>📈 Padrões Identificados</h3>
+                    <div id="patternResults"></div>
+                </div>
+
+                <div class="result-card">
+                    <h3>🔑 Possíveis Chaves/Parâmetros</h3>
+                    <div id="keyResults"></div>
+                </div>
+            </div>
+
+            <div class="hex-viewer">
+                <h3>🔍 Visualizador Hexadecimal</h3>
+                <div class="hex-tabs">
+                    <button class="hex-tab active" data-target="originalHex">Original</button>
+                    <button class="hex-tab" data-target="encryptedHex">Criptografado</button>
+                </div>
+                <div class="hex-content">
+                    <div id="originalHex" class="hex-display active"></div>
+                    <div id="encryptedHex" class="hex-display"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h2>ℹ️ Informações sobre WantToCry</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>🎯 ID Único Detectado</h3>
+                    <p><code>3C579D75CF2341758A9B984A0B943F18</code></p>
+                </div>
+                <div class="info-card">
+                    <h3>💰 Valor do Resgate</h3>
+                    <p><strong>$600 USD</strong> em Bitcoin</p>
+                </div>
+                <div class="info-card">
+                    <h3>🔐 Algoritmo Suspeito</h3>
+                    <p id="algorithmGuess">Analisando...</p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>⚠️ Esta ferramenta é apenas para análise educacional. Não garantimos a recuperação dos arquivos.</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
