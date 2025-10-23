@@ -184,11 +184,24 @@ class WebServer {
                                 const outputFilename = `alt_decrypted_${Date.now()}_${originalName}`;
                                 const outputPath = path.join(this.outputDir, outputFilename);
                                 
-                                fs.writeFileSync(outputPath, bestResult.data);
-                                fs.unlinkSync(file.path);
+                                // Garantir que o diretório existe
+                                if (!fs.existsSync(this.outputDir)) {
+                                    fs.mkdirSync(this.outputDir, { recursive: true });
+                                }
                                 
-                                console.log(`✅ Descriptografia alternativa bem-sucedida: ${outputFilename}`);
-                                console.log(`📁 Arquivo salvo em: ${outputPath}`);
+                                fs.writeFileSync(outputPath, bestResult.data);
+                                
+                                // Verificar se o arquivo foi realmente criado
+                                if (fs.existsSync(outputPath)) {
+                                    console.log(`✅ Descriptografia alternativa bem-sucedida: ${outputFilename}`);
+                                    console.log(`📁 Arquivo salvo em: ${outputPath}`);
+                                    console.log(`📂 Diretório de saída: ${this.outputDir}`);
+                                    console.log(`📋 Arquivo existe: ${fs.existsSync(outputPath)}`);
+                                } else {
+                                    console.error(`❌ Erro: Arquivo não foi criado em ${outputPath}`);
+                                }
+                                
+                                fs.unlinkSync(file.path);
                                 
                                 this.sendJSON(res, 200, {
                                     success: true,

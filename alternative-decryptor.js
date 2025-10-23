@@ -405,7 +405,7 @@ class AlternativeDecryptor {
                     ...result,
                     outputPath: outputPath
                 });
-                console.log(`💾 Resultado salvo: ${outputPath} (confiança: ${result.confidence.toFixed(2)})`);
+                console.log(`💾 Resultado salvo: ${path.basename(outputPath)} (confiança: ${result.confidence.toFixed(2)})`);
             }
         }
         
