@@ -584,11 +584,27 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                 }
                 
                 // Criar preview mais informativo
-                if (pdfValidation.corruption.length > 0) {
-                    successfulResult.preview = `PDF com problemas - ${pdfValidation.pages} página(s), versão ${pdfValidation.version} (${pdfValidation.corruption.join(', ')})`;
+                let previewMessage = '';
+                if (pdfValidation.contentAnalysis.isEmpty) {
+                    previewMessage = `PDF estruturalmente válido mas VAZIO - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                } else if (!pdfValidation.contentAnalysis.hasVisibleText && !pdfValidation.contentAnalysis.hasImages) {
+                    previewMessage = `PDF válido mas SEM CONTEÚDO VISÍVEL - ${pdfValidation.pages} página(s), versão ${pdfValidation.version} (tipo: ${pdfValidation.contentAnalysis.contentType})`;
+                } else if (pdfValidation.corruption.length > 0) {
+                    previewMessage = `PDF com problemas - ${pdfValidation.pages} página(s), versão ${pdfValidation.version} (${pdfValidation.corruption.join(', ')})`;
                 } else {
-                    successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                    previewMessage = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                    if (pdfValidation.contentAnalysis.hasVisibleText) {
+                        previewMessage += ` (${pdfValidation.contentAnalysis.textStreams} streams de texto)`;
+                    }
+                    if (pdfValidation.contentAnalysis.hasImages) {
+                        previewMessage += ` (${pdfValidation.contentAnalysis.imageObjects} imagens)`;
+                    }
                 }
+                
+                successfulResult.preview = previewMessage;
+                
+                // Adicionar informações detalhadas sobre o conteúdo
+                successfulResult.contentAnalysis = pdfValidation.contentAnalysis;
                 
                 console.log(`📄 Validação PDF:`, pdfValidation);
                 console.log(`🔑 Método usado: ${successfulResult.method}`);
@@ -602,6 +618,38 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                     });
                     console.log(`💡 Sugestão: Tente abrir o PDF em diferentes visualizadores (Adobe Reader, Chrome, Firefox)`);
                 }
+                
+                // Log sobre análise de conteúdo
+                console.log(`📊 Análise de conteúdo:`);
+                console.log(`   - Tipo: ${pdfValidation.contentAnalysis.contentType}`);
+                console.log(`   - Texto visível: ${pdfValidation.contentAnalysis.hasVisibleText ? 'Sim' : 'Não'}`);
+                console.log(`   - Imagens: ${pdfValidation.contentAnalysis.hasImages ? 'Sim' : 'Não'}`);
+                console.log(`   - Streams de texto: ${pdfValidation.contentAnalysis.textStreams}`);
+                console.log(`   - Objetos de imagem: ${pdfValidation.contentAnalysis.imageObjects}`);
+                console.log(`   - Objetos de fonte: ${pdfValidation.contentAnalysis.fontObjects}`);
+                console.log(`   - Está vazio: ${pdfValidation.contentAnalysis.isEmpty ? 'Sim' : 'Não'}`);
+                
+                if (pdfValidation.contentAnalysis.extractedText.length > 0) {
+                    console.log(`📝 Texto extraído (primeiras 3 linhas):`);
+                    pdfValidation.contentAnalysis.extractedText.slice(0, 3).forEach((text, index) => {
+                        console.log(`   ${index + 1}. "${text}"`);
+                    });
+                }
+                
+                // Sugestões específicas baseadas na análise
+                if (pdfValidation.contentAnalysis.isEmpty) {
+                    console.log(`💡 DIAGNÓSTICO: O PDF foi descriptografado com sucesso mas está completamente vazio.`);
+                    console.log(`   Isso pode indicar que:`);
+                    console.log(`   1. O arquivo original já estava vazio antes da criptografia`);
+                    console.log(`   2. A chave de descriptografia está correta mas o conteúdo foi perdido`);
+                    console.log(`   3. O arquivo pode ter sido corrompido durante o processo de criptografia`);
+                } else if (!pdfValidation.contentAnalysis.hasVisibleText && !pdfValidation.contentAnalysis.hasImages) {
+                    console.log(`💡 DIAGNÓSTICO: O PDF tem estrutura válida mas sem conteúdo visível.`);
+                    console.log(`   Possíveis causas:`);
+                    console.log(`   1. Conteúdo pode estar em formato binário não reconhecido`);
+                    console.log(`   2. Fontes ou recursos necessários podem estar ausentes`);
+                    console.log(`   3. O conteúdo pode estar em camadas ocultas ou com cor branca`);
+                }
             } catch (error) {
                 console.error(`❌ Erro ao salvar arquivo: ${error.message}`);
             }
@@ -614,8 +662,10 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
             attempts: results.length,
             fileSize: successfulResult ? Buffer.from(successfulResult.data, 'base64').length : 0,
             pdfValidation: successfulResult ? successfulResult.pdfValidation : null,
+            contentAnalysis: successfulResult ? successfulResult.contentAnalysis : null,
             preview: successfulResult ? successfulResult.preview : 'Nenhum método de descriptografia foi eficaz',
-            attemptDetails: results
+            attemptDetails: results,
+            diagnosis: successfulResult && successfulResult.contentAnalysis ? generateDiagnosis(successfulResult.contentAnalysis) : null
         });
 
     } catch (error) {
@@ -1350,7 +1400,19 @@ function validatePDFStructure(data) {
         endsCorrectly: false,
         objectCount: 0,
         size: data.length,
-        corruption: []
+        corruption: [],
+        contentAnalysis: {
+            hasVisibleText: false,
+            hasImages: false,
+            hasStreams: false,
+            textStreams: 0,
+            imageObjects: 0,
+            fontObjects: 0,
+            isEmpty: false,
+            contentType: 'unknown',
+            extractedText: [],
+            streamDetails: []
+        }
     };
 
     try {
@@ -1378,6 +1440,9 @@ function validatePDFStructure(data) {
         // Contar objetos PDF
         const objMatches = content.match(/\d+\s+\d+\s+obj/g);
         result.objectCount = objMatches ? objMatches.length : 0;
+
+        // Análise detalhada do conteúdo
+        analyzeContentDetails(content, result.contentAnalysis);
 
         // Contar páginas - múltiplos métodos
         let pageCount = 0;
@@ -1425,6 +1490,25 @@ function validatePDFStructure(data) {
         }
 
         // Para PDFs grandes sem páginas detectadas, assumir pelo menos 1 se tem objetos
+        // Determinar se o PDF está vazio ou tem conteúdo
+        if (result.contentAnalysis.isEmpty) {
+            result.corruption.push('PDF aparenta estar vazio ou sem conteúdo visível');
+        } else if (!result.contentAnalysis.hasVisibleText && !result.contentAnalysis.hasImages) {
+            result.corruption.push('PDF não contém texto ou imagens visíveis');
+        }
+
+        if (pageCount === 0) {
+            // Tentar métodos alternativos para detectar páginas
+            const countMatch = content.match(/\/Count\s+(\d+)/);
+            if (countMatch) {
+                pageCount = parseInt(countMatch[1]);
+                result.corruption.push('Páginas detectadas via /Count');
+            }
+        }
+
+        result.pages = pageCount;
+
+        // Se não conseguiu detectar páginas mas tem objetos, assumir pelo menos 1
         if (pageCount === 0 && result.objectCount > 0 && data.length > 100000) {
             result.pages = 1;
             result.corruption.push('Páginas não detectadas automaticamente (PDF grande)');
@@ -1449,6 +1533,145 @@ function validatePDFStructure(data) {
     }
 
     return result;
+}
+
+// Nova função para análise detalhada do conteúdo
+function analyzeContentDetails(content, analysis) {
+    try {
+        // Verificar streams de texto (BT...ET)
+        const textStreams = content.match(/BT[\s\S]*?ET/g);
+        if (textStreams) {
+            analysis.hasVisibleText = true;
+            analysis.textStreams = textStreams.length;
+            analysis.hasStreams = true;
+            analysis.contentType = 'text';
+            
+            // Extrair texto real dos streams
+            textStreams.forEach((stream, index) => {
+                const textMatches = stream.match(/\(([^)]*)\)\s*Tj/g);
+                if (textMatches) {
+                    textMatches.forEach(match => {
+                        const text = match.match(/\(([^)]*)\)/);
+                        if (text && text[1] && text[1].trim()) {
+                            analysis.extractedText.push(text[1]);
+                        }
+                    });
+                }
+                
+                analysis.streamDetails.push({
+                    index: index + 1,
+                    hasFont: /\/F\d+/.test(stream),
+                    hasPosition: /\d+\s+\d+\s+Td/.test(stream),
+                    hasText: /\([^)]*\)\s*Tj/.test(stream),
+                    length: stream.length
+                });
+            });
+        }
+
+        // Verificar objetos de imagem
+        const imageMatches = content.match(/\/Type\s*\/XObject[\s\S]*?\/Subtype\s*\/Image/g);
+        if (imageMatches) {
+            analysis.hasImages = true;
+            analysis.imageObjects = imageMatches.length;
+            analysis.hasStreams = true;
+            if (!analysis.hasVisibleText) {
+                analysis.contentType = 'image';
+            } else {
+                analysis.contentType = 'mixed';
+            }
+        }
+
+        // Verificar objetos de fonte
+        const fontMatches = content.match(/\/Type\s*\/Font/g);
+        if (fontMatches) {
+            analysis.fontObjects = fontMatches.length;
+        }
+
+        // Verificar se há streams em geral
+        const streamMatches = content.match(/stream[\s\S]*?endstream/g);
+        if (streamMatches && streamMatches.length > 0) {
+            analysis.hasStreams = true;
+        }
+
+        // Determinar se está vazio
+        analysis.isEmpty = !analysis.hasVisibleText && 
+                          !analysis.hasImages && 
+                          analysis.extractedText.length === 0 &&
+                          (!streamMatches || streamMatches.length === 0);
+
+        // Se não tem conteúdo visível mas tem streams, pode ser conteúdo binário
+        if (!analysis.hasVisibleText && !analysis.hasImages && analysis.hasStreams) {
+            analysis.contentType = 'binary';
+        }
+
+        // Se não tem nada, está vazio
+        if (analysis.isEmpty) {
+            analysis.contentType = 'empty';
+        }
+
+    } catch (error) {
+        console.error('Erro na análise de conteúdo:', error);
+        analysis.contentType = 'error';
+    }
+}
+
+// Função para gerar diagnóstico baseado na análise de conteúdo
+function generateDiagnosis(contentAnalysis) {
+    const diagnosis = {
+        status: 'unknown',
+        message: '',
+        recommendations: [],
+        severity: 'info'
+    };
+
+    if (contentAnalysis.isEmpty) {
+        diagnosis.status = 'empty';
+        diagnosis.message = 'PDF descriptografado com sucesso, mas está completamente vazio';
+        diagnosis.severity = 'warning';
+        diagnosis.recommendations = [
+            'Verifique se o arquivo original já estava vazio antes da criptografia',
+            'Confirme se a chave de descriptografia está correta',
+            'Considere que o arquivo pode ter sido corrompido durante a criptografia',
+            'Tente abrir o arquivo em diferentes visualizadores de PDF'
+        ];
+    } else if (!contentAnalysis.hasVisibleText && !contentAnalysis.hasImages) {
+        diagnosis.status = 'no_visible_content';
+        diagnosis.message = 'PDF tem estrutura válida mas não contém texto ou imagens visíveis';
+        diagnosis.severity = 'warning';
+        diagnosis.recommendations = [
+            'O conteúdo pode estar em formato binário não reconhecido',
+            'Fontes ou recursos necessários podem estar ausentes',
+            'O conteúdo pode estar em camadas ocultas ou com cor branca',
+            'Tente usar ferramentas especializadas de análise de PDF',
+            'Verifique se há objetos incorporados ou anexos no PDF'
+        ];
+    } else if (contentAnalysis.hasVisibleText || contentAnalysis.hasImages) {
+        diagnosis.status = 'success';
+        diagnosis.message = 'PDF descriptografado com sucesso e contém conteúdo visível';
+        diagnosis.severity = 'success';
+        diagnosis.recommendations = [
+            'O arquivo foi descriptografado corretamente',
+            'Você pode abrir o arquivo normalmente em qualquer visualizador de PDF'
+        ];
+        
+        if (contentAnalysis.hasVisibleText) {
+            diagnosis.message += ` (${contentAnalysis.textStreams} streams de texto encontrados)`;
+        }
+        if (contentAnalysis.hasImages) {
+            diagnosis.message += ` (${contentAnalysis.imageObjects} imagens encontradas)`;
+        }
+    } else if (contentAnalysis.contentType === 'binary') {
+        diagnosis.status = 'binary_content';
+        diagnosis.message = 'PDF contém dados binários que podem não ser visíveis diretamente';
+        diagnosis.severity = 'info';
+        diagnosis.recommendations = [
+            'O arquivo pode conter dados incorporados ou anexos',
+            'Use ferramentas especializadas para extrair conteúdo binário',
+            'Verifique se há formulários ou campos interativos no PDF'
+        ];
+    }
+
+    return diagnosis;
 }
 
 // Rota para download do arquivo descriptografado
