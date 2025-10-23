@@ -538,7 +538,27 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                 // Analisar conteúdo do PDF para verificar se está em branco
                 console.log(`🔍 Analisando conteúdo do PDF...`);
                 const contentAnalysis = analyzeAndImproveContent(finalData);
-                console.log(`📄 Análise de conteúdo:`, contentAnalysis);
+                console.log(`📄 Análise de conteúdo:`, JSON.stringify(contentAnalysis, null, 2));
+                
+                // Se há texto mas ainda está em branco, criar versão com texto extraído
+                if (contentAnalysis.hasVisibleText && contentAnalysis.streamDetails.length > 0) {
+                    const extractedTexts = [];
+                    contentAnalysis.streamDetails.forEach(stream => {
+                        if (stream.textContent.length > 0) {
+                            extractedTexts.push(...stream.textContent);
+                        }
+                    });
+
+                    if (extractedTexts.length > 0) {
+                        console.log('📝 Texto extraído do PDF:', extractedTexts);
+                        
+                        // Criar PDF com texto extraído visível
+                        const extractedTextPDF = createExtractedTextPDF(extractedTexts, successfulResult.method, successfulResult.keyUsed);
+                        const extractedPath = path.join(tempDir, 'decrypted_file_extracted_text.pdf');
+                        fs.writeFileSync(extractedPath, extractedTextPDF);
+                        console.log(`📄 PDF com texto extraído salvo: ${extractedPath}`);
+                    }
+                }
                 
                 // Se o PDF está estruturalmente correto mas sem conteúdo visível, criar versão de teste
                 if (pdfValidation.isValid && contentAnalysis.contentType === 'empty_or_binary') {
@@ -853,14 +873,42 @@ function analyzeAndImproveContent(data) {
             hasVisibleText: false,
             hasImages: false,
             contentType: 'unknown',
-            suggestions: []
+            suggestions: [],
+            textStreams: [],
+            streamDetails: []
         };
 
-        // Verificar se há texto visível
+        // Verificar se há texto visível e extrair detalhes
         const textMatch = content.match(/BT[\s\S]*?ET/g);
         if (textMatch && textMatch.length > 0) {
             analysis.hasVisibleText = true;
             analysis.contentType = 'text';
+            analysis.textStreams = textMatch;
+            
+            // Analisar cada stream de texto
+            textMatch.forEach((stream, index) => {
+                const streamAnalysis = {
+                    index: index + 1,
+                    content: stream,
+                    hasFont: /\/F\d+/.test(stream),
+                    hasPosition: /\d+\s+\d+\s+Td/.test(stream),
+                    hasText: /\([^)]*\)\s*Tj/.test(stream),
+                    textContent: []
+                };
+                
+                // Extrair texto real
+                const textMatches = stream.match(/\(([^)]*)\)\s*Tj/g);
+                if (textMatches) {
+                    textMatches.forEach(match => {
+                        const text = match.match(/\(([^)]*)\)/);
+                        if (text && text[1]) {
+                            streamAnalysis.textContent.push(text[1]);
+                        }
+                    });
+                }
+                
+                analysis.streamDetails.push(streamAnalysis);
+            });
         }
 
         // Verificar se há imagens
@@ -870,11 +918,28 @@ function analyzeAndImproveContent(data) {
             analysis.contentType = analysis.contentType === 'text' ? 'mixed' : 'image';
         }
 
-        // Se não há conteúdo visível, tentar criar conteúdo de teste
-        if (!analysis.hasVisibleText && !analysis.hasImages) {
+        // Análise mais detalhada do problema
+        if (analysis.hasVisibleText) {
+            const hasValidFont = analysis.streamDetails.some(s => s.hasFont);
+            const hasValidPosition = analysis.streamDetails.some(s => s.hasPosition);
+            const hasValidText = analysis.streamDetails.some(s => s.textContent.length > 0);
+            
+            if (!hasValidFont) {
+                analysis.suggestions.push('Texto encontrado mas sem fonte definida');
+            }
+            if (!hasValidPosition) {
+                analysis.suggestions.push('Texto encontrado mas sem posicionamento');
+            }
+            if (!hasValidText) {
+                analysis.suggestions.push('Comandos de texto encontrados mas sem conteúdo legível');
+            }
+            
+            if (hasValidFont && hasValidPosition && hasValidText) {
+                analysis.suggestions.push('Texto parece válido - problema pode ser de codificação ou visualizador');
+            }
+        } else {
             analysis.contentType = 'empty_or_binary';
-            analysis.suggestions.push('Adicionar texto de teste para verificar se o PDF funciona');
-            analysis.suggestions.push('Conteúdo original pode ser binário ou corrompido');
+            analysis.suggestions.push('Nenhum texto visível encontrado');
         }
 
         return analysis;
@@ -883,9 +948,120 @@ function analyzeAndImproveContent(data) {
             hasVisibleText: false,
             hasImages: false,
             contentType: 'error',
-            suggestions: [`Erro na análise: ${error.message}`]
+            suggestions: [`Erro na análise: ${error.message}`],
+            textStreams: [],
+            streamDetails: []
         };
     }
+}
+
+// Função para criar PDF com texto extraído
+function createExtractedTextPDF(extractedTexts, method, key) {
+    const content = `%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/Contents 5 0 R
+>>
+endobj
+
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+
+5 0 obj
+<<
+/Length ${calculateStreamLength(extractedTexts, method, key)}
+>>
+stream
+BT
+/F1 12 Tf
+50 750 Td
+(TEXTO EXTRAÍDO DO PDF DESCRIPTOGRAFADO) Tj
+0 -20 Td
+(Método: ${method}) Tj
+0 -20 Td
+(Chave: ${key}) Tj
+0 -40 Td
+(CONTEÚDO ENCONTRADO:) Tj
+${extractedTexts.map((text, index) => `0 -20 Td\n(${index + 1}. ${text.replace(/[()\\]/g, '\\$&')}) Tj`).join('\n')}
+0 -40 Td
+(Este PDF foi gerado automaticamente para exibir) Tj
+0 -20 Td
+(o texto encontrado no arquivo original.) Tj
+ET
+endstream
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000329 00000 n 
+trailer
+<<
+/Size 6
+/Root 1 0 R
+>>
+startxref
+${calculateXrefPosition(extractedTexts, method, key)}
+%%EOF`;
+
+    return Buffer.from(content, 'binary');
+}
+
+function calculateStreamLength(extractedTexts, method, key) {
+    const baseContent = `BT
+/F1 12 Tf
+50 750 Td
+(TEXTO EXTRAÍDO DO PDF DESCRIPTOGRAFADO) Tj
+0 -20 Td
+(Método: ${method}) Tj
+0 -20 Td
+(Chave: ${key}) Tj
+0 -40 Td
+(CONTEÚDO ENCONTRADO:) Tj
+${extractedTexts.map((text, index) => `0 -20 Td\n(${index + 1}. ${text.replace(/[()\\]/g, '\\$&')}) Tj`).join('\n')}
+0 -40 Td
+(Este PDF foi gerado automaticamente para exibir) Tj
+0 -20 Td
+(o texto encontrado no arquivo original.) Tj
+ET`;
+    return baseContent.length;
+}
+
+function calculateXrefPosition(extractedTexts, method, key) {
+    const streamLength = calculateStreamLength(extractedTexts, method, key);
+    return 430 + streamLength;
 }
 
 // Função para criar PDF com conteúdo de teste
