@@ -8,11 +8,19 @@ interface FileAnalysis {
   fileName: string;
   fileSize: number;
   isEncrypted: boolean;
-  encryptionType: string;
-  originalExtension?: string;
-  analysisDate: Date;
-  recoveryPossible: boolean;
-  notes: string[];
+  ransomwareType: string;
+  entropy: number;
+  originalExtension: string;
+  recoveryMethods: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  analysisDate: string;
+  decryptionResult?: {
+    success: boolean;
+    method?: string;
+    originalName?: string;
+    error?: string;
+  };
+  decryptedFile?: Uint8Array;
 }
 
 function App() {

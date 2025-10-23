@@ -1,94 +1,276 @@
-import React, { useState, useEffect } from 'react';
-import { Search, FileText, AlertCircle, CheckCircle, Clock, Download } from 'lucide-react';
-import CryptoJS from 'crypto-js';
+import React, { useState, useCallback, useEffect } from 'react';
+import { FileText, AlertTriangle, Shield, Download, CheckCircle, XCircle, Info, Unlock, Key } from 'lucide-react';
+import { WannaCryDecryptor, DecryptionResult } from '../utils/decryption';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
-interface FileAnalysis {
+interface AnalysisResult {
   fileName: string;
   fileSize: number;
   isEncrypted: boolean;
-  encryptionType: string;
-  originalExtension?: string;
-  analysisDate: Date;
-  recoveryPossible: boolean;
-  notes: string[];
+  ransomwareType: string;
+  entropy: number;
+  originalExtension: string;
+  recoveryMethods: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  analysisDate: string;
+  decryptionResult?: DecryptionResult;
+  decryptedFile?: Uint8Array;
 }
 
 interface FileAnalyzerProps {
   files: File[];
-  onAnalysisComplete: (analyses: FileAnalysis[]) => void;
+  onAnalysisComplete: (results: AnalysisResult[]) => void;
 }
 
-const FileAnalyzer: React.FC<FileAnalyzerProps> = ({ files, onAnalysisComplete }) => {
-  const [analyses, setAnalyses] = useState<FileAnalysis[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzerProps) {
+  const [analyzing, setAnalyzing] = useState(false);
+  const [results, setResults] = useState<AnalysisResult[]>([]);
   const [currentFile, setCurrentFile] = useState<string>('');
+  const [progress, setProgress] = useState(0);
+  const [decrypting, setDecrypting] = useState(false);
 
-  const analyzeFile = async (file: File): Promise<FileAnalysis> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        const uint8Array = new Uint8Array(arrayBuffer);
+  const analyzeAndDecryptFile = useCallback(async (file: File): Promise<AnalysisResult> => {
+    const fileData = new Uint8Array(await file.arrayBuffer());
+    
+    // Análise básica
+    const entropy = calculateEntropy(fileData);
+    const isEncrypted = entropy > 7.5 || isWannaCryFile(file.name, fileData);
+    const ransomwareType = detectRansomwareType(file.name, fileData);
+    
+    let result: AnalysisResult = {
+      fileName: file.name,
+      fileSize: file.size,
+      isEncrypted,
+      ransomwareType,
+      entropy,
+      originalExtension: extractOriginalExtension(file.name),
+      recoveryMethods: getRecoveryMethods(ransomwareType),
+      riskLevel: entropy > 7.8 ? 'high' : entropy > 7.0 ? 'medium' : 'low',
+      analysisDate: new Date().toISOString(),
+    };
+
+    // Tentar descriptografia se for WannaCry
+    if (isEncrypted && ransomwareType === 'WannaCry') {
+      try {
+        const decryptionResult = await WannaCryDecryptor.decryptFile(fileData, file.name);
+        result.decryptionResult = decryptionResult;
         
-        // Análise básica do arquivo
-        const analysis: FileAnalysis = {
+        if (decryptionResult.success && decryptionResult.decryptedData) {
+          result.decryptedFile = decryptionResult.decryptedData;
+          result.recoveryMethods = ['Descriptografia bem-sucedida!'];
+          result.riskLevel = 'low';
+        }
+      } catch (error) {
+        result.decryptionResult = {
+          success: false,
+          error: `Erro na descriptografia: ${error}`
+        };
+      }
+    }
+
+    return result;
+  }, []);
+
+  const startAnalysis = useCallback(async () => {
+    if (files.length === 0) return;
+
+    setAnalyzing(true);
+    setDecrypting(true);
+    setResults([]);
+    setProgress(0);
+
+    const analysisResults: AnalysisResult[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentFile(file.name);
+      
+      try {
+        const result = await analyzeAndDecryptFile(file);
+        analysisResults.push(result);
+      } catch (error) {
+        analysisResults.push({
           fileName: file.name,
           fileSize: file.size,
-          isEncrypted: true,
-          encryptionType: 'WannaCry Ransomware',
-          analysisDate: new Date(),
-          recoveryPossible: false,
-          notes: []
-        };
-
-        // Detectar extensão original
-        if (file.name.includes('.want_to_cry')) {
-          const originalName = file.name.replace('.want_to_cry', '');
-          const lastDot = originalName.lastIndexOf('.');
-          if (lastDot > 0) {
-            analysis.originalExtension = originalName.substring(lastDot);
+          isEncrypted: false,
+          ransomwareType: 'Erro na análise',
+          entropy: 0,
+          originalExtension: '',
+          recoveryMethods: [`Erro: ${error}`],
+          riskLevel: 'high',
+          analysisDate: new Date().toISOString(),
+          decryptionResult: {
+            success: false,
+            error: `Erro na análise: ${error}`
           }
-        }
+        });
+      }
 
-        // Análise de cabeçalho do arquivo
-        const header = Array.from(uint8Array.slice(0, 16))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
+      setProgress(((i + 1) / files.length) * 100);
+    }
 
-        // Verificar assinaturas conhecidas do WannaCry
-        if (header.includes('57616e6e61437279') || // "WannaCry" em hex
-            uint8Array[0] === 0x57 && uint8Array[1] === 0x4e && uint8Array[2] === 0x43) {
-          analysis.notes.push('Assinatura WannaCry detectada no cabeçalho');
-          analysis.encryptionType = 'WannaCry v2.0';
-        }
+    setResults(analysisResults);
+    setAnalyzing(false);
+    setDecrypting(false);
+    setCurrentFile('');
+    onAnalysisComplete(analysisResults);
+  }, [files, analyzeAndDecryptFile, onAnalysisComplete]);
 
-        // Verificar se há padrões de criptografia AES
-        const entropy = calculateEntropy(uint8Array.slice(0, 1024));
-        if (entropy > 7.5) {
-          analysis.notes.push(`Alta entropia detectada (${entropy.toFixed(2)}) - indica criptografia forte`);
-        }
+  const downloadDecryptedFile = (result: AnalysisResult) => {
+    if (result.decryptedFile) {
+      const blob = new Blob([result.decryptedFile], { type: 'application/octet-stream' });
+      const originalName = result.fileName.replace(/\.wncry$|\.wcry$|\.locked$/i, '');
+      saveAs(blob, `decrypted_${originalName}`);
+      
+      // Notificar sucesso
+      alert(`Arquivo ${originalName} descriptografado e baixado com sucesso!`);
+    }
+  };
 
-        // Verificar tamanho do arquivo
-        if (file.size > 0) {
-          analysis.notes.push(`Arquivo de ${formatFileSize(file.size)}`);
-          
-          // Arquivos muito pequenos podem ter chance de recuperação
-          if (file.size < 1024) {
-            analysis.recoveryPossible = true;
-            analysis.notes.push('Arquivo pequeno - possível recuperação por força bruta');
-          }
-        }
+  const downloadAllDecrypted = async () => {
+    const decryptedFiles = results.filter(r => r.decryptedFile);
+    if (decryptedFiles.length === 0) {
+      alert('Nenhum arquivo descriptografado disponível para download.');
+      return;
+    }
 
-        // Verificar se há backup shadow copies
-        analysis.notes.push('Verificar Shadow Copies do Windows para possível recuperação');
-        analysis.notes.push('Considerar ferramentas de recuperação de dados especializadas');
+    try {
+      const zip = new JSZip();
+      decryptedFiles.forEach((result, index) => {
+        const originalName = result.fileName.replace(/\.wncry$|\.wcry$|\.locked$/i, '');
+        zip.file(`decrypted_${originalName}`, result.decryptedFile!);
+      });
 
-        resolve(analysis);
-      };
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, `decrypted_files_${new Date().toISOString().split('T')[0]}.zip`);
+      
+      // Notificar sucesso
+      alert(`${decryptedFiles.length} arquivos descriptografados baixados em um ZIP!`);
+    } catch (error) {
+      console.error('Erro ao criar ZIP:', error);
+      alert('Erro ao criar arquivo ZIP. Tente baixar os arquivos individualmente.');
+    }
+  };
 
-      reader.readAsArrayBuffer(file.slice(0, Math.min(file.size, 10240))); // Ler primeiros 10KB
-    });
+  const autoDownloadDecrypted = (result: AnalysisResult) => {
+    // Download automático após descriptografia bem-sucedida
+    if (result.decryptionResult?.success && result.decryptedFile) {
+      setTimeout(() => {
+        downloadDecryptedFile(result);
+      }, 1000); // Pequeno delay para melhor UX
+    }
+  };
+
+  const downloadDecryptedFiles = async () => {
+    const decryptedFiles = results.filter(r => r.decryptedFile);
+    
+    if (decryptedFiles.length === 0) {
+      alert('Nenhum arquivo foi descriptografado com sucesso.');
+      return;
+    }
+
+    if (decryptedFiles.length === 1) {
+      // Download único
+      const file = decryptedFiles[0];
+      const originalName = file.decryptionResult?.originalName || 
+                          file.originalExtension || 
+                          file.fileName.replace(/\.(wncry|wcry|want_to_cry|wncryt)$/, '');
+      
+      const blob = new Blob([file.decryptedFile!]);
+      saveAs(blob, originalName);
+    } else {
+      // Download múltiplo em ZIP
+      const zip = new JSZip();
+      
+      decryptedFiles.forEach((file, index) => {
+        const originalName = file.decryptionResult?.originalName || 
+                            file.originalExtension || 
+                            `arquivo_${index + 1}_descriptografado`;
+        zip.file(originalName, file.decryptedFile!);
+      });
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveAs(zipBlob, 'arquivos_descriptografados.zip');
+    }
+  };
+
+  const exportReport = () => {
+    const report = {
+      timestamp: new Date().toISOString(),
+      totalFiles: results.length,
+      encryptedFiles: results.filter(r => r.isEncrypted).length,
+      decryptedFiles: results.filter(r => r.decryptionResult?.success).length,
+      results: results.map(r => ({
+        ...r,
+        decryptedFile: undefined // Não incluir dados binários no relatório
+      })),
+      decryptionReport: WannaCryDecryptor.generateDecryptionReport(
+        results.map(r => r.decryptionResult).filter(Boolean) as DecryptionResult[]
+      )
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    saveAs(blob, `relatorio_descriptografia_${new Date().toISOString().split('T')[0]}.json`);
+  };
+
+  const isWannaCryFile = (fileName: string, data: Uint8Array): boolean => {
+    // Verificar extensões conhecidas do WannaCry
+    const wannaCryExtensions = ['.wncry', '.wcry', '.want_to_cry', '.wncryt'];
+    const hasWannaCryExtension = wannaCryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+    
+    // Verificar assinaturas no cabeçalho
+    const header = Array.from(data.slice(0, 16))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    const hasWannaCrySignature = header.includes('57616e6e61437279') || // "WannaCry" em hex
+                                (data[0] === 0x57 && data[1] === 0x4e && data[2] === 0x43);
+    
+    return hasWannaCryExtension || hasWannaCrySignature;
+  };
+
+  const detectRansomwareType = (fileName: string, data: Uint8Array): string => {
+    if (isWannaCryFile(fileName, data)) {
+      return 'WannaCry';
+    }
+    
+    // Outros tipos de ransomware podem ser detectados aqui
+    const entropy = calculateEntropy(data.slice(0, 1024));
+    if (entropy > 7.5) {
+      return 'Ransomware Desconhecido';
+    }
+    
+    return 'Não Detectado';
+  };
+
+  const extractOriginalExtension = (fileName: string): string => {
+    const wannaCryExtensions = ['.wncry', '.wcry', '.want_to_cry', '.wncryt'];
+    
+    for (const ext of wannaCryExtensions) {
+      if (fileName.toLowerCase().endsWith(ext)) {
+        const originalName = fileName.slice(0, -ext.length);
+        const lastDot = originalName.lastIndexOf('.');
+        return lastDot > 0 ? originalName.substring(lastDot) : '';
+      }
+    }
+    
+    return '';
+  };
+
+  const getRecoveryMethods = (ransomwareType: string): string[] => {
+    const methods = [];
+    
+    if (ransomwareType === 'WannaCry') {
+      methods.push('Tentativa de descriptografia automática');
+      methods.push('Verificar Shadow Copies do Windows');
+      methods.push('Usar ferramentas especializadas (WanaKiwi, WannaCrypt0r)');
+    }
+    
+    methods.push('Restaurar backup mais recente');
+    methods.push('Ferramentas de recuperação de dados');
+    
+    return methods;
   };
 
   const calculateEntropy = (data: Uint8Array): number => {
@@ -117,137 +299,212 @@ const FileAnalyzer: React.FC<FileAnalyzerProps> = ({ files, onAnalysisComplete }
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const startAnalysis = async () => {
-    if (files.length === 0) return;
 
-    setIsAnalyzing(true);
-    const results: FileAnalysis[] = [];
-
-    for (const file of files) {
-      setCurrentFile(file.name);
-      const analysis = await analyzeFile(file);
-      results.push(analysis);
-      
-      // Simular tempo de processamento
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-
-    setAnalyses(results);
-    setIsAnalyzing(false);
-    setCurrentFile('');
-    onAnalysisComplete(results);
-  };
 
   useEffect(() => {
     if (files.length > 0) {
-      startAnalysis();
+      const processFiles = async () => {
+        const newResults: AnalysisResult[] = [];
+        
+        for (const file of files) {
+          const result = await analyzeAndDecryptFile(file);
+          newResults.push(result);
+          
+          // Download automático se descriptografado com sucesso
+          autoDownloadDecrypted(result);
+        }
+        
+        setResults(newResults);
+        onAnalysisComplete?.(newResults);
+      };
+      
+      processFiles();
     }
-  }, [files]);
+  }, [files, analyzeAndDecryptFile, onAnalysisComplete]);
 
-  const exportAnalysis = () => {
-    const report = {
-      timestamp: new Date().toISOString(),
-      totalFiles: analyses.length,
-      analyses: analyses
-    };
 
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wannacry-analysis-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="w-full">
-      {isAnalyzing && (
-        <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+      {analyzing && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center space-x-3">
             <div className="animate-spin">
-              <Search className="w-5 h-5 text-primary-600" />
+              <Shield className="w-5 h-5 text-blue-600" />
             </div>
-            <div>
-              <p className="font-medium text-primary-800">Analisando arquivos...</p>
+            <div className="flex-1">
+              <p className="font-medium text-blue-800">
+                {decrypting ? 'Analisando e descriptografando arquivos...' : 'Analisando arquivos...'}
+              </p>
               {currentFile && (
-                <p className="text-sm text-primary-600">Processando: {currentFile}</p>
+                <p className="text-sm text-blue-600">Processando: {currentFile}</p>
               )}
+              <div className="mt-2 bg-blue-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-blue-600 mt-1">{Math.round(progress)}% concluído</p>
             </div>
           </div>
         </div>
       )}
 
-      {analyses.length > 0 && (
+      {results.length > 0 && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-semibold text-gray-800">
-              Relatório de Análise ({analyses.length} arquivos)
-            </h3>
-            <button
-              onClick={exportAnalysis}
-              className="btn-secondary flex items-center space-x-2"
-            >
-              <Download className="w-4 h-4" />
-              <span>Exportar Relatório</span>
-            </button>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-800">
+                Relatório de Análise ({results.length} arquivos)
+              </h3>
+              <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                <span className="flex items-center space-x-1">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  <span>{results.filter(r => r.isEncrypted).length} criptografados</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span>{results.filter(r => r.decryptionResult?.success).length} descriptografados</span>
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={exportReport}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar Relatório</span>
+              </button>
+              
+              {results.some(r => r.decryptedFile) && (
+                <button
+                  onClick={downloadAllDecrypted}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Todos Descriptografados</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-4">
-            {analyses.map((analysis, index) => (
-              <div key={index} className="card p-6">
+            {results.map((result, index) => (
+              <div key={index} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
-                    <FileText className="w-8 h-8 text-danger-500" />
+                    <div className="relative">
+                      <FileText className={`w-8 h-8 ${
+                        result.decryptionResult?.success ? 'text-green-500' : 
+                        result.isEncrypted ? 'text-red-500' : 'text-gray-500'
+                      }`} />
+                      {result.decryptionResult?.success && (
+                        <Unlock className="w-4 h-4 text-green-600 absolute -top-1 -right-1 bg-white rounded-full" />
+                      )}
+                    </div>
                     <div>
-                      <h4 className="font-medium text-gray-800">{analysis.fileName}</h4>
+                      <h4 className="font-medium text-gray-800">{result.fileName}</h4>
                       <p className="text-sm text-gray-500">
-                        {formatFileSize(analysis.fileSize)} • {analysis.encryptionType}
+                        {formatFileSize(result.fileSize)} • {result.ransomwareType}
                       </p>
+                      {result.originalExtension && (
+                        <p className="text-xs text-gray-400">
+                          Extensão original: {result.originalExtension}
+                        </p>
+                      )}
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    {analysis.recoveryPossible ? (
-                      <div className="flex items-center space-x-1 text-success-600">
-                        <CheckCircle className="w-4 h-4" />
-                        <span className="text-sm font-medium">Recuperação Possível</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-1 text-danger-600">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-sm font-medium">Recuperação Difícil</span>
-                      </div>
-                    )}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      result.riskLevel === 'high' ? 'bg-red-100 text-red-800' :
+                      result.riskLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      Risco {result.riskLevel === 'high' ? 'Alto' : result.riskLevel === 'medium' ? 'Médio' : 'Baixo'}
+                    </span>
                   </div>
                 </div>
 
-                {analysis.originalExtension && (
-                  <div className="mb-3">
-                    <span className="inline-block px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded">
-                      Extensão Original: {analysis.originalExtension}
-                    </span>
+                {result.decryptionResult && (
+                  <div className={`mb-4 p-3 rounded-lg ${
+                    result.decryptionResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                  }`}>
+                    <div className="flex items-center space-x-2 mb-2">
+                      {result.decryptionResult.success ? (
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-red-600" />
+                      )}
+                      <span className={`font-medium ${
+                        result.decryptionResult.success ? 'text-green-800' : 'text-red-800'
+                      }`}>
+                        {result.decryptionResult.success ? 'Descriptografia Bem-sucedida!' : 'Falha na Descriptografia'}
+                      </span>
+                    </div>
+                    {result.decryptionResult.originalName && (
+                      <p className="text-sm text-green-700">
+                        Nome original: {result.decryptionResult.originalName}
+                      </p>
+                    )}
+                    {result.decryptionResult.error && (
+                      <p className="text-sm text-red-700">
+                        Erro: {result.decryptionResult.error}
+                      </p>
+                    )}
+                    {result.decryptionResult.method && (
+                      <p className="text-sm text-gray-600">
+                        Método: {result.decryptionResult.method}
+                      </p>
+                    )}
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <h5 className="font-medium text-gray-700">Notas da Análise:</h5>
-                  <ul className="space-y-1">
-                    {analysis.notes.map((note, noteIndex) => (
-                      <li key={noteIndex} className="text-sm text-gray-600 flex items-start space-x-2">
-                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                        <span>{note}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-4 text-sm">
+                    <span className="flex items-center space-x-1">
+                      <Info className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Entropia: {result.entropy.toFixed(2)}</span>
+                    </span>
+                    {result.isEncrypted && (
+                      <span className="flex items-center space-x-1">
+                        <Key className="w-4 h-4 text-red-400" />
+                        <span className="text-red-600">Criptografado</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-2">Métodos de Recuperação:</h5>
+                    <ul className="space-y-1">
+                      {result.recoveryMethods.map((method, methodIndex) => (
+                        <li key={methodIndex} className="text-sm text-gray-600 flex items-start space-x-2">
+                          <span className="w-1 h-1 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
+                          <span>{method}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center space-x-2 text-sm text-gray-500">
-                    <Clock className="w-4 h-4" />
-                    <span>Analisado em: {analysis.analysisDate.toLocaleString('pt-BR')}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-sm text-gray-500">
+                      <span>Analisado em: {new Date(result.analysisDate).toLocaleString('pt-BR')}</span>
+                    </div>
+                    
+                    {result.decryptedFile && (
+                      <button
+                        onClick={() => downloadDecryptedFile(result)}
+                        className="flex items-center space-x-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Baixar Descriptografado</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -257,6 +514,4 @@ const FileAnalyzer: React.FC<FileAnalyzerProps> = ({ files, onAnalysisComplete }
       )}
     </div>
   );
-};
-
-export default FileAnalyzer;
+}
