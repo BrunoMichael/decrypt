@@ -153,13 +153,42 @@ class WebServer {
                             if (alternativeResult.results && alternativeResult.results.length > 0) {
                                 // Usar o melhor resultado
                                 const bestResult = alternativeResult.results[0];
-                                const outputFilename = `alt_decrypted_${Date.now()}_${file.originalname.replace(/\.want_to_cry$/, '')}`;
+                                
+                                // Determinar extensão correta baseada na análise do header
+                                let originalName = file.originalname.replace(/\.want_to_cry$/, '');
+                                let detectedExtension = '';
+                                
+                                if (alternativeResult.headerAnalysis && alternativeResult.headerAnalysis.detectedType) {
+                                    const detectedType = alternativeResult.headerAnalysis.detectedType.toLowerCase();
+                                    if (detectedType.includes('pdf')) {
+                                        detectedExtension = '.pdf';
+                                    } else if (detectedType.includes('doc')) {
+                                        detectedExtension = '.doc';
+                                    } else if (detectedType.includes('image') || detectedType.includes('jpeg')) {
+                                        detectedExtension = '.jpg';
+                                    } else if (detectedType.includes('png')) {
+                                        detectedExtension = '.png';
+                                    }
+                                }
+                                
+                                // Se não detectou extensão, manter a original
+                                if (!detectedExtension && !path.extname(originalName)) {
+                                    detectedExtension = '.pdf'; // Assumir PDF como padrão para WantToCry
+                                }
+                                
+                                // Garantir que o nome tenha a extensão correta
+                                if (detectedExtension && !originalName.endsWith(detectedExtension)) {
+                                    originalName = originalName.replace(/\.[^.]*$/, '') + detectedExtension;
+                                }
+                                
+                                const outputFilename = `alt_decrypted_${Date.now()}_${originalName}`;
                                 const outputPath = path.join(this.outputDir, outputFilename);
                                 
                                 fs.writeFileSync(outputPath, bestResult.data);
                                 fs.unlinkSync(file.path);
                                 
                                 console.log(`✅ Descriptografia alternativa bem-sucedida: ${outputFilename}`);
+                                console.log(`📁 Arquivo salvo em: ${outputPath}`);
                                 
                                 this.sendJSON(res, 200, {
                                     success: true,

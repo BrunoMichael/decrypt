@@ -51,9 +51,25 @@ class AlternativeDecryptor {
             // Procurar por padrões conhecidos de ransomware
             const ransomwarePattern = this.detectRansomwarePattern(buffer);
             
+            // Determinar tipo de arquivo mais provável
+            let detectedFileType = 'unknown';
+            if (detectedType && detectedType.length > 0) {
+                detectedFileType = detectedType[0];
+            } else if (magicType && magicType.length > 0) {
+                detectedFileType = magicType[0];
+            }
+            
+            // Verificar se é PDF baseado em padrões comuns
+            if (buffer.includes(Buffer.from('%PDF')) || 
+                buffer.includes(Buffer.from('PDF')) ||
+                first64Bytes.includes(0x25) && first64Bytes.includes(0x50) && first64Bytes.includes(0x44) && first64Bytes.includes(0x46)) {
+                detectedFileType = 'application/pdf';
+            }
+            
             return {
                 originalType: detectedType,
                 magicBytes: magicType,
+                detectedType: detectedFileType,
                 entropy: entropy,
                 ransomwarePattern: ransomwarePattern,
                 fileSize: buffer.length,
