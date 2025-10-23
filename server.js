@@ -942,6 +942,16 @@ function analyzeAndImproveContent(data) {
             analysis.suggestions.push('Nenhum texto visível encontrado');
         }
 
+        // Limitar o tamanho dos textStreams no log para evitar sobrecarga
+        if (analysis.textStreams.length > 0) {
+            analysis.textStreamsCount = analysis.textStreams.length;
+            analysis.textStreamsSample = analysis.textStreams.slice(0, 2).map(stream => 
+                stream.length > 200 ? stream.substring(0, 200) + '...' : stream
+            );
+            // Remover textStreams completos do objeto de análise para o log
+            delete analysis.textStreams;
+        }
+
         return analysis;
     } catch (error) {
         return {

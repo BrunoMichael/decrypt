@@ -153,7 +153,7 @@ class CryptoAnalyzer {
                 <p><strong>Tentativas realizadas:</strong> ${results.attempts || 0}</p>
                 ${results.success ? `
                     <p><strong>Método usado:</strong> ${results.method}</p>
-                    <p><strong>Chave:</strong> ${results.key}</p>
+                    <p><strong>Chave:</strong> ${results.keyUsed || results.key || 'N/A'}</p>
                     <button onclick="window.open('/download-decrypted', '_blank')" class="download-btn">
                         📥 Baixar Arquivo Descriptografado
                     </button>
@@ -176,7 +176,7 @@ class CryptoAnalyzer {
                                 <span class="attempt-status">${attempt.success ? '✅' : '❌'}</span>
                             </div>
                             <div class="attempt-details">
-                                <p><strong>Chave:</strong> ${attempt.key}</p>
+                                <p><strong>Chave:</strong> ${attempt.keyUsed || attempt.key || 'N/A'}</p>
                                 ${attempt.preview ? `<p><strong>Preview:</strong> ${attempt.preview}</p>` : ''}
                                 ${attempt.error ? `<p class="error"><strong>Erro:</strong> ${attempt.error}</p>` : ''}
                             </div>
