@@ -238,9 +238,12 @@ class MicroDecryptor {
             
             const inputFd = fs.openSync(filePath, 'r');
             
-            // Criar nome de arquivo de saída mais específico
+            // Criar nome de arquivo de saída mais específico - usar caminhos relativos
             const originalName = path.basename(filePath).replace('.want_to_cry', '');
-            const outputDir = path.dirname(filePath).replace('uploads', 'decrypted');
+            const projectRoot = path.dirname(filePath).includes('uploads') 
+                ? path.dirname(path.dirname(filePath)) 
+                : path.dirname(filePath);
+            const outputDir = path.join(projectRoot, 'decrypted');
             
             // Garantir que o diretório de saída existe
             if (!fs.existsSync(outputDir)) {
