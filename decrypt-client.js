@@ -149,14 +149,27 @@ class DecryptClient {
         this.resultsSection.style.display = 'block';
         
         if (result.success) {
+            let methodInfo = '';
+            if (result.method && result.method.startsWith('alternative_')) {
+                methodInfo = `
+                    <p><strong>Método Usado:</strong> ${result.method} (Confiança: ${(result.confidence * 100).toFixed(1)}%)</p>
+                    <p><strong>Tentativas Realizadas:</strong> ${result.totalAttempts}</p>
+                `;
+                if (result.headerAnalysis) {
+                    methodInfo += `<p><strong>Entropia do Arquivo:</strong> ${result.headerAnalysis.entropy.toFixed(2)}</p>`;
+                }
+            } else {
+                methodInfo = `<p><strong>Método Usado:</strong> ${result.method}</p>`;
+            }
+            
             this.resultsContent.innerHTML = `
                 <div class="success-result">
                     <i class="fas fa-check-circle"></i>
                     <h3>Descriptografia Bem-sucedida!</h3>
                     <div class="result-details">
                         <p><strong>Arquivo Original:</strong> ${result.originalName}</p>
-                        <p><strong>Método Usado:</strong> ${result.method}</p>
-                        <p><strong>Tipo de Arquivo:</strong> ${result.fileType}</p>
+                        ${methodInfo}
+                        <p><strong>Tipo de Arquivo:</strong> ${result.fileType || 'Detectado automaticamente'}</p>
                         ${result.corrected ? '<p><strong>Status:</strong> Cabeçalho corrigido automaticamente</p>' : ''}
                     </div>
                     <a href="/download/${result.filename}" class="download-btn" download>
@@ -166,17 +179,31 @@ class DecryptClient {
                 </div>
             `;
         } else {
+            let additionalInfo = '';
+            if (result.headerAnalysis) {
+                additionalInfo = `
+                    <div class="analysis-info">
+                        <h4>Análise do Arquivo:</h4>
+                        <p><strong>Entropia:</strong> ${result.headerAnalysis.entropy.toFixed(2)}</p>
+                        <p><strong>Tamanho:</strong> ${result.headerAnalysis.fileSize} bytes</p>
+                        ${result.totalAttempts ? `<p><strong>Tentativas:</strong> ${result.totalAttempts}</p>` : ''}
+                    </div>
+                `;
+            }
+            
             this.resultsContent.innerHTML = `
                 <div class="error-result">
                     <i class="fas fa-exclamation-triangle"></i>
                     <h3>Falha na Descriptografia</h3>
                     <p class="error-message">${result.error}</p>
+                    ${additionalInfo}
                     <div class="error-suggestions">
                         <h4>Possíveis soluções:</h4>
                         <ul>
                             <li>Verifique se o arquivo está realmente criptografado pelo WantToCry</li>
                             <li>Tente diferentes valores para Tox ID e Victim ID</li>
                             <li>Certifique-se de que o arquivo não está corrompido</li>
+                            <li>O sistema tentou métodos alternativos automaticamente</li>
                         </ul>
                     </div>
                 </div>

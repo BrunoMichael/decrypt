@@ -4,11 +4,13 @@ const path = require('path');
 const url = require('url');
 const multer = require('multer');
 const WantToCryDecryptor = require('./decryptor');
+const AlternativeDecryptor = require('./alternative-decryptor');
 
 class WebServer {
     constructor(port = 3000) {
         this.port = port;
         this.decryptor = new WantToCryDecryptor();
+        this.alternativeDecryptor = new AlternativeDecryptor();
         this.uploadsDir = path.join(__dirname, 'uploads');
         this.outputDir = path.join(__dirname, 'decrypted');
         
@@ -142,15 +144,56 @@ class WebServer {
                             originalName: file.originalname
                         });
                     } else {
-                        // Limpar arquivo temporário
-                        fs.unlinkSync(file.path);
+                        // Se a descriptografia padrão falhou, tentar métodos alternativos
+                        console.log(`🔄 Tentando métodos alternativos de descriptografia...`);
+                        
+                        try {
+                            const alternativeResult = await this.alternativeDecryptor.decryptAlternative(file.path, this.outputDir);
+                            
+                            if (alternativeResult.results && alternativeResult.results.length > 0) {
+                                // Usar o melhor resultado
+                                const bestResult = alternativeResult.results[0];
+                                const outputFilename = `alt_decrypted_${Date.now()}_${file.originalname.replace(/\.want_to_cry$/, '')}`;
+                                const outputPath = path.join(this.outputDir, outputFilename);
+                                
+                                fs.writeFileSync(outputPath, bestResult.data);
+                                fs.unlinkSync(file.path);
+                                
+                                console.log(`✅ Descriptografia alternativa bem-sucedida: ${outputFilename}`);
+                                
+                                this.sendJSON(res, 200, {
+                                    success: true,
+                                    filename: outputFilename,
+                                    method: `alternative_${bestResult.method}`,
+                                    confidence: bestResult.confidence,
+                                    headerAnalysis: alternativeResult.headerAnalysis,
+                                    originalName: file.originalname,
+                                    totalAttempts: alternativeResult.totalAttempts
+                                });
+                            } else {
+                                // Limpar arquivo temporário
+                                fs.unlinkSync(file.path);
+                                
+                                console.log(`❌ Falha na descriptografia: ${result.error}`);
 
-                        console.log(`❌ Falha na descriptografia: ${result.error}`);
+                                this.sendJSON(res, 400, {
+                                    success: false,
+                                    error: result.error || 'Não foi possível descriptografar o arquivo',
+                                    headerAnalysis: alternativeResult.headerAnalysis,
+                                    totalAttempts: alternativeResult.totalAttempts
+                                });
+                            }
+                        } catch (altError) {
+                            // Limpar arquivo temporário
+                            fs.unlinkSync(file.path);
+                            
+                            console.log(`❌ Falha na descriptografia alternativa: ${altError.message}`);
 
-                        this.sendJSON(res, 400, {
-                            success: false,
-                            error: result.error || 'Não foi possível descriptografar o arquivo'
-                        });
+                            this.sendJSON(res, 400, {
+                                success: false,
+                                error: result.error || 'Não foi possível descriptografar o arquivo'
+                            });
+                        }
                     }
 
                     resolve();
