@@ -5,12 +5,14 @@ const url = require('url');
 const multer = require('multer');
 const WantToCryDecryptor = require('./decryptor');
 const AlternativeDecryptor = require('./alternative-decryptor');
+const MicroDecryptor = require('./micro-decryptor');
 
 class WebServer {
     constructor(port = 3000) {
         this.port = port;
         this.decryptor = new WantToCryDecryptor();
         this.alternativeDecryptor = new AlternativeDecryptor();
+        this.microDecryptor = new MicroDecryptor();
         this.uploadsDir = path.join(__dirname, 'uploads');
         this.outputDir = path.join(__dirname, 'decrypted');
         
@@ -59,16 +61,30 @@ class WebServer {
         console.log(`📊 Memória Externa: ${Math.round(memUsage.external / 1024 / 1024)}MB`);
         console.log(`⚡ Limite configurado: 1500MB (SquareCloud)`);
         
-        // Configurar limpeza automática de memória
+        // Configurar limpeza automática de memória mais agressiva
         setInterval(() => {
             if (global.gc) {
+                const beforeGC = process.memoryUsage();
                 global.gc();
-                const newMemUsage = process.memoryUsage();
-                if (newMemUsage.heapUsed > 1200 * 1024 * 1024) { // Se usar mais de 1.2GB
-                    console.log(`🧹 Limpeza de memória executada. Heap: ${Math.round(newMemUsage.heapUsed / 1024 / 1024)}MB`);
+                const afterGC = process.memoryUsage();
+                
+                const heapBefore = Math.round(beforeGC.heapUsed / 1024 / 1024);
+                const heapAfter = Math.round(afterGC.heapUsed / 1024 / 1024);
+                
+                if (heapBefore > 800) { // Se usar mais de 800MB
+                    console.log(`🧹 Limpeza de memória: ${heapBefore}MB → ${heapAfter}MB`);
+                }
+                
+                // Se ainda estiver usando muita memória, forçar limpeza adicional
+                if (afterGC.heapUsed > 1000 * 1024 * 1024) { // Mais de 1GB
+                    console.log(`⚠️ Uso alto de memória detectado: ${Math.round(afterGC.heapUsed / 1024 / 1024)}MB`);
+                    // Forçar segunda limpeza
+                    setTimeout(() => {
+                        if (global.gc) global.gc();
+                    }, 1000);
                 }
             }
-        }, 30000); // A cada 30 segundos
+        }, 15000); // A cada 15 segundos (mais frequente)
             
             console.log(`🚀 Servidor WantToCry Decryptor iniciado!`);
             console.log(`📱 Interface Web: http://localhost:${this.port}`);
@@ -170,6 +186,35 @@ class WebServer {
                         console.log(`🔄 Tentando métodos alternativos de descriptografia...`);
                         
                         try {
+                            // Primeiro tentar o MicroDecryptor (ultra-otimizado)
+                            console.log(`🔬 Tentando MicroDecryptor (ultra-otimizado)...`);
+                            const microResults = await this.microDecryptor.decrypt(file.path);
+                            
+                            if (microResults && microResults.length > 0) {
+                                console.log(`✅ MicroDecryptor encontrou ${microResults.length} resultado(s)`);
+                                
+                                // Processar arquivo completo com a chave encontrada
+                                const validKey = microResults[0].key;
+                                const outputPath = await this.microDecryptor.processFullFile(file.path, validKey);
+                                
+                                if (outputPath && fs.existsSync(outputPath)) {
+                                    const stats = fs.statSync(outputPath);
+                                    console.log(`✅ Arquivo descriptografado salvo: ${outputPath} (${stats.size} bytes)`);
+                                    
+                                    return res.json({
+                                        success: true,
+                                        message: 'Arquivo descriptografado com sucesso usando MicroDecryptor!',
+                                        downloadUrl: `/download/${path.basename(outputPath)}`,
+                                        originalSize: file.size,
+                                        decryptedSize: stats.size,
+                                        method: 'MicroDecryptor',
+                                        key: validKey
+                                    });
+                                }
+                            }
+                            
+                            // Se MicroDecryptor falhou, tentar AlternativeDecryptor
+                            console.log(`🔄 MicroDecryptor falhou, tentando AlternativeDecryptor...`);
                             const alternativeResult = await this.alternativeDecryptor.decryptAlternative(file.path, this.outputDir);
                             
                             if (alternativeResult.results && alternativeResult.results.length > 0) {
