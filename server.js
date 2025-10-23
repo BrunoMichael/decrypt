@@ -256,18 +256,35 @@ class WebServer {
     }
 
     async handleDownloadRequest(req, res, pathname) {
-        const filename = pathname.replace('/download/', '');
+        const filename = decodeURIComponent(pathname.replace('/download/', ''));
+        
+        console.log(`🔍 Procurando arquivo: ${filename}`);
         
         // Verificar se é um arquivo descriptografado
         let filePath = path.join(this.outputDir, filename);
+        console.log(`📁 Verificando em outputDir: ${filePath}`);
+        console.log(`📋 Arquivo existe em outputDir: ${fs.existsSync(filePath)}`);
         
         // Se não encontrar no diretório de saída, verificar no diretório de uploads
         if (!fs.existsSync(filePath)) {
             filePath = path.join(this.uploadsDir, filename);
+            console.log(`📁 Verificando em uploadsDir: ${filePath}`);
+            console.log(`📋 Arquivo existe em uploadsDir: ${fs.existsSync(filePath)}`);
         }
 
         if (!fs.existsSync(filePath)) {
             console.log(`❌ Arquivo não encontrado: ${filename}`);
+            console.log(`📂 OutputDir: ${this.outputDir}`);
+            console.log(`📂 UploadsDir: ${this.uploadsDir}`);
+            
+            // Listar arquivos no diretório para debug
+            try {
+                const outputFiles = fs.readdirSync(this.outputDir);
+                console.log(`📋 Arquivos em outputDir:`, outputFiles);
+            } catch (e) {
+                console.log(`❌ Erro ao listar outputDir: ${e.message}`);
+            }
+            
             this.send404(res, pathname);
             return;
         }
