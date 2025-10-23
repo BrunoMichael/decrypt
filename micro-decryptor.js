@@ -240,17 +240,28 @@ class MicroDecryptor {
             
             // Criar nome de arquivo de saída mais específico - usar caminhos relativos
             const originalName = path.basename(filePath).replace('.want_to_cry', '');
+            
+            // DEBUG: Log dos caminhos
+            console.log(`🔍 [DEBUG] filePath: ${filePath}`);
+            console.log(`🔍 [DEBUG] path.dirname(filePath): ${path.dirname(filePath)}`);
+            console.log(`🔍 [DEBUG] includes uploads: ${path.dirname(filePath).includes('uploads')}`);
+            
             const projectRoot = path.dirname(filePath).includes('uploads') 
                 ? path.dirname(path.dirname(filePath)) 
                 : path.dirname(filePath);
             const outputDir = path.join(projectRoot, 'decrypted');
             
+            console.log(`🔍 [DEBUG] projectRoot: ${projectRoot}`);
+            console.log(`🔍 [DEBUG] outputDir: ${outputDir}`);
+            
             // Garantir que o diretório de saída existe
             if (!fs.existsSync(outputDir)) {
                 fs.mkdirSync(outputDir, { recursive: true });
+                console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
             }
             
             const outputPath = path.join(outputDir, `micro_decrypted_${Date.now()}_${originalName}`);
+            console.log(`🔍 [DEBUG] outputPath final: ${outputPath}`);
             const outputFd = fs.openSync(outputPath, 'w');
             
             // Ler IV dos primeiros 16 bytes
