@@ -117,9 +117,35 @@ class AlternativeDecryptor {
         const buffer = fs.readFileSync(filePath);
         const results = [];
         
-        console.log(`🔍 Iniciando força bruta com ${this.commonKeys.length} chaves comuns...`);
+        // Expandir chaves comuns com variações específicas para PDFs
+        const expandedKeys = [
+            ...this.commonKeys,
+            // Chaves específicas para PDFs
+            'PDF',
+            'pdf',
+            '%PDF',
+            'Adobe',
+            'ADOBE',
+            // Chaves específicas do WantToCry
+            'WantToCry2017',
+            'wcry@2ol7',
+            'WANACRY',
+            'wannacry',
+            'WCRY',
+            'wcry',
+            // Variações numéricas
+            '12345',
+            '123456',
+            '1234567890',
+            // Chaves baseadas em datas
+            '20170512',
+            '2017051',
+            '170512'
+        ];
         
-        for (const baseKey of this.commonKeys) {
+        console.log(`🔍 Iniciando força bruta com ${expandedKeys.length} chaves comuns...`);
+        
+        for (const baseKey of expandedKeys) {
             // Testar diferentes variações da chave
             const keyVariations = this.generateKeyVariations(baseKey);
             
@@ -366,7 +392,138 @@ class AlternativeDecryptor {
             }
         }
         
+        // Tentar reparar headers PDF especificamente
+        const pdfRepairs = this.repairPDFHeader(buffer);
+        repairs.push(...pdfRepairs);
+        
         return repairs;
+    }
+
+    /**
+     * Repara headers PDF corrompidos
+     */
+    repairPDFHeader(data) {
+        const results = [];
+        
+        // Assinaturas PDF conhecidas
+        const pdfSignatures = [
+            Buffer.from([0x25, 0x50, 0x44, 0x46]), // %PDF
+            Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E]), // %PDF-1.
+            Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34]), // %PDF-1.4
+            Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x35]), // %PDF-1.5
+            Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x36]), // %PDF-1.6
+            Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37])  // %PDF-1.7
+        ];
+        
+        // Tentar diferentes offsets para encontrar o header PDF
+        const maxOffset = Math.min(1024, data.length - 8);
+        
+        for (let offset = 0; offset < maxOffset; offset++) {
+            for (const signature of pdfSignatures) {
+                if (data.length >= offset + signature.length) {
+                    const repairedData = Buffer.alloc(data.length);
+                    data.copy(repairedData);
+                    
+                    // Inserir assinatura PDF no offset
+                    signature.copy(repairedData, offset);
+                    
+                    // Verificar se parece um PDF válido
+                    const confidence = this.calculatePDFConfidence(repairedData);
+                    
+                    if (confidence > 0.3) {
+                        results.push({
+                            method: `pdf_header_repair_offset_${offset}`,
+                            data: repairedData,
+                            confidence: confidence,
+                            description: `PDF header repair at offset ${offset}`
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Tentar reparar estrutura PDF básica
+        if (data.length > 1024) {
+            const basicPDFStructure = this.createBasicPDFStructure(data);
+            if (basicPDFStructure) {
+                const confidence = this.calculatePDFConfidence(basicPDFStructure);
+                if (confidence > 0.4) {
+                    results.push({
+                        method: 'pdf_structure_repair',
+                        data: basicPDFStructure,
+                        confidence: confidence,
+                        description: 'Basic PDF structure repair'
+                    });
+                }
+            }
+        }
+        
+        return results;
+    }
+    
+    calculatePDFConfidence(data) {
+        let confidence = 0;
+        
+        // Verificar assinatura PDF
+        if (data.slice(0, 4).toString() === '%PDF') {
+            confidence += 0.4;
+        }
+        
+        // Procurar por palavras-chave PDF
+        const dataStr = data.toString('latin1');
+        const pdfKeywords = ['obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer', 'startxref'];
+        
+        for (const keyword of pdfKeywords) {
+            if (dataStr.includes(keyword)) {
+                confidence += 0.1;
+            }
+        }
+        
+        // Verificar estrutura básica
+        if (dataStr.includes('%%EOF')) {
+            confidence += 0.2;
+        }
+        
+        return Math.min(confidence, 1.0);
+    }
+    
+    createBasicPDFStructure(originalData) {
+        try {
+            // Criar estrutura PDF básica mínima
+            const header = '%PDF-1.4\n';
+            const catalog = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
+            const pages = '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n';
+            const page = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n';
+            
+            // Tentar incorporar dados originais como stream
+            const streamData = originalData.slice(0, Math.min(originalData.length, 50000)); // Limitar tamanho
+            const stream = `4 0 obj\n<< /Length ${streamData.length} >>\nstream\n`;
+            const streamEnd = '\nendstream\nendobj\n';
+            
+            const xref = 'xref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000074 00000 n \n0000000120 00000 n \n0000000179 00000 n \n';
+            const trailer = 'trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n';
+            const startxref = (header + catalog + pages + page + stream).length + streamData.length + streamEnd.length;
+            const eof = '\n%%EOF';
+            
+            // Montar PDF
+            const pdfParts = [
+                Buffer.from(header),
+                Buffer.from(catalog),
+                Buffer.from(pages),
+                Buffer.from(page),
+                Buffer.from(stream),
+                streamData,
+                Buffer.from(streamEnd),
+                Buffer.from(xref),
+                Buffer.from(trailer),
+                Buffer.from(startxref.toString()),
+                Buffer.from(eof)
+            ];
+            
+            return Buffer.concat(pdfParts);
+        } catch (error) {
+            return null;
+        }
     }
 
     /**
