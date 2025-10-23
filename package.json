@@ -4,11 +4,11 @@
   "description": "Descriptografador para arquivos infectados pelo ransomware WantToCry",
   "main": "server.js",
   "scripts": {
-    "start": "node --max-old-space-size=1024 --optimize-for-size server.js",
+    "start": "node --max-old-space-size=1400 --optimize-for-size --expose-gc server.js",
     "decrypt": "node decryptor.js decrypt",
     "test": "node -c decryptor.js && node -c file-handlers.js",
-    "web": "node --max-old-space-size=1024 --optimize-for-size server.js",
-    "dev": "node --max-old-space-size=1024 --optimize-for-size server.js"
+    "web": "node --max-old-space-size=1400 --optimize-for-size --expose-gc server.js",
+    "dev": "node --max-old-space-size=1400 --optimize-for-size --expose-gc server.js"
   },
   "keywords": [
     "decryption",

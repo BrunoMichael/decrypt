@@ -52,11 +52,23 @@ class WebServer {
             console.log('Descriptografador para arquivos infectados pelo ransomware WantToCry');
             console.log('');
             
-            // Monitoramento de memória
-            const memUsage = process.memoryUsage();
-            console.log(`💾 Memória: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB usados / ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB total`);
-            console.log(`🔧 Limite máximo: ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
-            console.log('');
+            // Monitoramento de memória aprimorado
+        const memUsage = process.memoryUsage();
+        console.log(`💾 Memória Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB usados / ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB total`);
+        console.log(`🔧 RSS Total: ${Math.round(memUsage.rss / 1024 / 1024)}MB`);
+        console.log(`📊 Memória Externa: ${Math.round(memUsage.external / 1024 / 1024)}MB`);
+        console.log(`⚡ Limite configurado: 1500MB (SquareCloud)`);
+        
+        // Configurar limpeza automática de memória
+        setInterval(() => {
+            if (global.gc) {
+                global.gc();
+                const newMemUsage = process.memoryUsage();
+                if (newMemUsage.heapUsed > 1200 * 1024 * 1024) { // Se usar mais de 1.2GB
+                    console.log(`🧹 Limpeza de memória executada. Heap: ${Math.round(newMemUsage.heapUsed / 1024 / 1024)}MB`);
+                }
+            }
+        }, 30000); // A cada 30 segundos
             
             console.log(`🚀 Servidor WantToCry Decryptor iniciado!`);
             console.log(`📱 Interface Web: http://localhost:${this.port}`);
