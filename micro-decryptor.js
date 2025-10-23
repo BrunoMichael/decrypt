@@ -237,7 +237,17 @@ class MicroDecryptor {
             const keyHash = crypto.createHash('sha256').update(validKey).digest();
             
             const inputFd = fs.openSync(filePath, 'r');
-            const outputPath = filePath.replace('.want_to_cry', '_decrypted.pdf');
+            
+            // Criar nome de arquivo de saída mais específico
+            const originalName = path.basename(filePath).replace('.want_to_cry', '');
+            const outputDir = path.dirname(filePath).replace('uploads', 'decrypted');
+            
+            // Garantir que o diretório de saída existe
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+            }
+            
+            const outputPath = path.join(outputDir, `micro_decrypted_${Date.now()}_${originalName}`);
             const outputFd = fs.openSync(outputPath, 'w');
             
             // Ler IV dos primeiros 16 bytes
@@ -246,6 +256,7 @@ class MicroDecryptor {
             
             let position = 16; // Começar após o IV
             let totalProcessed = 0;
+            let totalDecrypted = 0;
             
             while (position < fileSize) {
                 const remainingBytes = fileSize - position;
@@ -256,15 +267,34 @@ class MicroDecryptor {
                 
                 if (bytesRead === 0) break;
                 
-                // Descriptografar chunk
-                const decipher = crypto.createDecipheriv(this.algorithm, keyHash, ivBuffer);
-                decipher.setAutoPadding(false);
-                
-                let decrypted = decipher.update(chunk.slice(0, bytesRead));
-                decrypted = Buffer.concat([decrypted, decipher.final()]);
-                
-                // Escrever chunk descriptografado
-                fs.writeSync(outputFd, decrypted);
+                try {
+                    // Descriptografar chunk
+                    const decipher = crypto.createDecipheriv(this.algorithm, keyHash, ivBuffer);
+                    decipher.setAutoPadding(false);
+                    
+                    let decrypted = decipher.update(chunk.slice(0, bytesRead));
+                    
+                    // Para o último chunk, tentar aplicar padding
+                    if (position + bytesRead >= fileSize) {
+                        try {
+                            const final = decipher.final();
+                            decrypted = Buffer.concat([decrypted, final]);
+                        } catch (paddingError) {
+                            // Se falhar no padding, usar apenas o que foi descriptografado
+                            console.log(`⚠️ [MICRO] Aviso de padding no final do arquivo`);
+                        }
+                    }
+                    
+                    // Escrever chunk descriptografado
+                    if (decrypted.length > 0) {
+                        fs.writeSync(outputFd, decrypted);
+                        totalDecrypted += decrypted.length;
+                    }
+                    
+                } catch (chunkError) {
+                    console.error(`❌ [MICRO] Erro no chunk ${position}: ${chunkError.message}`);
+                    // Continuar com próximo chunk
+                }
                 
                 position += bytesRead;
                 totalProcessed += bytesRead;
@@ -275,14 +305,23 @@ class MicroDecryptor {
                 // Progresso
                 if (totalProcessed % (chunkSize * 10) === 0) {
                     const progress = ((totalProcessed / fileSize) * 100).toFixed(1);
-                    console.log(`📊 [MICRO] Progresso: ${progress}%`);
+                    console.log(`📊 [MICRO] Progresso: ${progress}% (${totalDecrypted} bytes descriptografados)`);
                 }
             }
             
             fs.closeSync(inputFd);
             fs.closeSync(outputFd);
             
-            console.log(`✅ [MICRO] Arquivo processado: ${outputPath}`);
+            // Verificar se o arquivo foi criado com sucesso
+            const finalStats = fs.statSync(outputPath);
+            console.log(`✅ [MICRO] Arquivo processado: ${outputPath} (${finalStats.size} bytes)`);
+            
+            if (finalStats.size === 0) {
+                console.error(`❌ [MICRO] Arquivo de saída vazio! Tentando método alternativo...`);
+                fs.unlinkSync(outputPath); // Remover arquivo vazio
+                return null;
+            }
+            
             return outputPath;
             
         } catch (error) {
