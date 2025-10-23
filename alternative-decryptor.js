@@ -111,82 +111,120 @@ class AlternativeDecryptor {
     }
 
     /**
+     * Método principal de descriptografia alternativa (ultra-otimizado)
+     */
+    async decrypt(filePath) {
+        try {
+            console.log(`🔍 Iniciando análise alternativa de: ${path.basename(filePath)}`);
+            
+            // Ler apenas uma amostra do arquivo para análise
+            const stats = fs.statSync(filePath);
+            const sampleSize = Math.min(stats.size, 50000); // Máximo 50KB para análise
+            
+            const fd = fs.openSync(filePath, 'r');
+            const buffer = Buffer.alloc(sampleSize);
+            fs.readSync(fd, buffer, 0, sampleSize, 0);
+            fs.closeSync(fd);
+            
+            console.log(`📊 Analisando amostra de ${sampleSize} bytes de ${stats.size} bytes totais`);
+            
+            // Análise básica do header
+            const headerAnalysis = this.analyzeHeader(buffer);
+            console.log('📊 Análise do header:', JSON.stringify(headerAnalysis, null, 2));
+            
+            // Tentar apenas métodos mais leves
+            const results = [];
+            
+            // 1. Verificar se é realmente criptografado
+            if (headerAnalysis.entropy < 6.0) {
+                console.log('⚠️ Arquivo pode não estar criptografado (entropia baixa)');
+                return [];
+            }
+            
+            // 2. Tentar apenas força bruta ultra-otimizada
+            console.log('🔄 Tentando força bruta ultra-otimizada...');
+            const bruteResults = await this.bruteForceDecrypt(buffer, headerAnalysis);
+            results.push(...bruteResults);
+            
+            // 3. Salvar apenas o melhor resultado
+            if (results.length > 0) {
+                const bestResult = results.reduce((best, current) => 
+                    current.confidence > best.confidence ? current : best
+                );
+                
+                if (bestResult.confidence > 0.3) {
+                    const outputPath = await this.saveResult(bestResult, filePath);
+                    console.log(`✅ Resultado salvo: ${outputPath}`);
+                    return [bestResult];
+                }
+            }
+            
+            console.log('❌ Nenhum método alternativo foi bem-sucedido');
+            return [];
+            
+        } catch (error) {
+            console.error('❌ Erro na descriptografia alternativa:', error.message);
+            return [];
+        }
+    }
+
+    /**
      * Tenta descriptografar usando força bruta com chaves comuns
      */
-    async bruteForceDecrypt(filePath, outputPath) {
-        const buffer = fs.readFileSync(filePath);
+    async bruteForceDecrypt(buffer, headerAnalysis) {
         const results = [];
         
-        // Chaves comuns do WantToCry e variações (reduzidas para economizar memória)
-        const commonKeys = [
+        // Chaves mais essenciais apenas (ultra reduzidas)
+        const essentialKeys = [
             'WantToCry2017',
             'wcry@2ol7',
             'WANACRY',
             'wannacry',
-            'WCRY',
-            'wcry',
-            '2017',
-            'ransom',
-            'bitcoin',
-            'decrypt',
-            'key',
-            'password',
-            // Chaves específicas para PDFs (limitadas)
             'PDF',
-            'pdf',
-            '%PDF',
-            'Adobe',
-            // Variações numéricas (limitadas)
-            '12345',
-            '123456',
-            // Chaves baseadas em datas (limitadas)
-            '20170512',
-            '170512'
+            '2017'
         ];
         
-        console.log(`🔍 Iniciando força bruta com ${commonKeys.length} chaves comuns (otimizado para memória)...`);
+        console.log(`🔍 Iniciando força bruta ultra-otimizada com ${essentialKeys.length} chaves essenciais...`);
         
-        for (const baseKey of commonKeys) {
-            // Limitar variações para economizar memória
-            const keyVariations = [
-                baseKey,
-                baseKey.toLowerCase(),
-                baseKey.toUpperCase(),
-                baseKey + '2017'
-            ];
+        // Processar apenas uma pequena amostra do arquivo
+        const sampleSize = Math.min(buffer.length, 10000); // Apenas 10KB
+        const sampleBuffer = buffer.slice(0, sampleSize);
+        
+        for (let i = 0; i < essentialKeys.length; i++) {
+            const key = essentialKeys[i];
             
-            for (const key of keyVariations) {
-                for (const algorithm of ['aes-128-cbc', 'aes-256-cbc']) { // Reduzir algoritmos testados
-                    try {
-                        // Limitar tamanho dos dados processados para evitar LACK_OF_RAM
-                        const maxSize = Math.min(buffer.length, 100000); // Máximo 100KB por tentativa
-                        const limitedBuffer = buffer.slice(0, maxSize);
-                        
-                        const result = await this.tryDecryptWithKey(limitedBuffer, key, algorithm);
-                        if (result.success) {
-                            results.push({
-                                key: key,
-                                algorithm: algorithm,
-                                confidence: result.confidence,
-                                data: result.data
-                            });
-                            
-                            console.log(`✅ Possível descriptografia encontrada com chave: ${key}, algoritmo: ${algorithm}`);
-                        }
-                    } catch (error) {
-                        // Continuar tentando outras combinações
-                    }
+            try {
+                console.log(`🔑 Testando chave ${i + 1}/${essentialKeys.length}: ${key}`);
+                
+                const result = await this.tryDecryptWithKey(sampleBuffer, key, 'aes-256-cbc');
+                if (result.success) {
+                    results.push({
+                        key: key,
+                        algorithm: 'aes-256-cbc',
+                        confidence: result.confidence,
+                        data: result.data
+                    });
                     
-                    // Forçar garbage collection a cada 5 tentativas
-                    if (results.length % 5 === 0) {
-                        if (global.gc) {
-                            global.gc();
-                        }
-                    }
+                    // Se encontrou uma chave promissora, parar para economizar memória
+                    console.log(`✅ Chave promissora encontrada: ${key} (confiança: ${result.confidence})`);
+                    break;
                 }
+                
+                // Forçar limpeza de memória após cada tentativa
+                if (global.gc) {
+                    global.gc();
+                }
+                
+                // Pequena pausa para evitar sobrecarga
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+            } catch (error) {
+                console.log(`⚠️ Erro com chave ${key}: ${error.message}`);
+                continue;
             }
         }
         
+        console.log(`🔍 Força bruta concluída. ${results.length} resultados encontrados.`);
         return results;
     }
 
@@ -213,51 +251,36 @@ class AlternativeDecryptor {
     }
 
     /**
-     * Tenta descriptografar com uma chave específica (otimizado para memória)
+     * Tenta descriptografar com uma chave específica (ultra-otimizado)
      */
     async tryDecryptWithKey(buffer, key, algorithm) {
         try {
             // Preparar chave para o algoritmo
             const keyBuffer = this.prepareKey(key, algorithm);
             
-            // Limitar tamanho dos dados para evitar LACK_OF_RAM
-            const maxDecryptSize = 50000; // 50KB máximo
-            const limitedBuffer = buffer.length > maxDecryptSize ? buffer.slice(0, maxDecryptSize) : buffer;
+            // Processar apenas uma pequena amostra para teste
+            const testSize = Math.min(buffer.length, 1024); // Apenas 1KB para teste
+            const testBuffer = buffer.slice(0, testSize);
             
-            // Tentar diferentes posições de IV
-            const ivPositions = [
-                { start: 0, length: 16 }, // IV no início
-                { start: limitedBuffer.length - 16, length: 16 }, // IV no final
-                { start: 16, length: 16 } // IV após possível header
-            ];
+            // Usar apenas posição de IV mais comum (início)
+            const ivSize = 16;
+            if (testBuffer.length <= ivSize) {
+                return { success: false };
+            }
             
-            for (const ivPos of ivPositions) {
-                if (ivPos.start + ivPos.length > limitedBuffer.length) continue;
-                
-                const iv = limitedBuffer.slice(ivPos.start, ivPos.start + ivPos.length);
-                const encryptedData = this.extractEncryptedData(limitedBuffer, ivPos);
-                
-                if (algorithm.includes('ecb')) {
-                    // ECB não usa IV
-                    const decipher = crypto.createDecipher(algorithm.replace('-ecb', ''), keyBuffer);
-                    let decrypted = decipher.update(encryptedData);
-                    decrypted = Buffer.concat([decrypted, decipher.final()]);
-                    
-                    const validation = this.validateDecryptedData(decrypted);
-                    if (validation.isValid) {
-                        return { success: true, data: decrypted, confidence: validation.confidence };
-                    }
-                } else {
-                    // CBC usa IV
-                    const decipher = crypto.createDecipheriv(algorithm, keyBuffer, iv);
-                    let decrypted = decipher.update(encryptedData);
-                    decrypted = Buffer.concat([decrypted, decipher.final()]);
-                    
-                    const validation = this.validateDecryptedData(decrypted);
-                    if (validation.isValid) {
-                        return { success: true, data: decrypted, confidence: validation.confidence };
-                    }
-                }
+            const iv = testBuffer.slice(0, ivSize);
+            const encryptedData = testBuffer.slice(ivSize);
+            
+            // Usar apenas CBC (mais comum no WantToCry)
+            const decipher = crypto.createDecipheriv(algorithm, keyBuffer, iv);
+            decipher.setAutoPadding(false);
+            
+            let decrypted = decipher.update(encryptedData);
+            decrypted = Buffer.concat([decrypted, decipher.final()]);
+            
+            const validation = this.validateDecryptedData(decrypted);
+            if (validation.isValid) {
+                return { success: true, data: decrypted, confidence: validation.confidence };
             }
             
             return { success: false };
