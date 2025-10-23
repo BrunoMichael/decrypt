@@ -478,16 +478,23 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
             
             const decryptedData = Buffer.from(successfulResult.data, 'base64');
             const decryptedPath = path.join(tempDir, 'decrypted_file.pdf');
-            fs.writeFileSync(decryptedPath, decryptedData);
             
-            console.log(`✅ Arquivo descriptografado salvo: ${decryptedPath}`);
-            
-            // Validação adicional do PDF
-            const pdfValidation = validatePDFStructure(decryptedData);
-            successfulResult.pdfValidation = pdfValidation;
-            successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
-            
-            console.log(`📄 Validação PDF:`, pdfValidation);
+            try {
+                fs.writeFileSync(decryptedPath, decryptedData);
+                console.log(`✅ Arquivo descriptografado salvo: ${decryptedPath}`);
+                console.log(`📊 Tamanho do arquivo: ${decryptedData.length} bytes`);
+                
+                // Validação adicional do PDF
+                const pdfValidation = validatePDFStructure(decryptedData);
+                successfulResult.pdfValidation = pdfValidation;
+                successfulResult.preview = `PDF válido - ${pdfValidation.pages} página(s), versão ${pdfValidation.version}`;
+                
+                console.log(`📄 Validação PDF:`, pdfValidation);
+                console.log(`🔑 Método usado: ${successfulResult.method}`);
+                console.log(`🗝️ Chave: ${successfulResult.keyUsed}`);
+            } catch (error) {
+                console.error(`❌ Erro ao salvar arquivo: ${error.message}`);
+            }
         }
 
         res.json({
