@@ -1,7 +1,7 @@
 # Dependências de desenvolvimento
 node_modules/
 
-# Arquivos de desenvolvimento
+# Arquivos de desenvolvimento React (não necessários para o servidor Node.js)
 src/
 public/
 
@@ -28,6 +28,15 @@ yarn-error.log*
 # Arquivos temporários
 .DS_Store
 Thumbs.db
+
+# Arquivos de teste
+*.test.js
+__tests__/
+coverage/
+
+# Documentação
+README.md
+*.md
 
 # Arquivos de teste
 coverage/

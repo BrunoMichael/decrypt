@@ -5,7 +5,12 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 80;
+
+// Configuração para produção
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
 
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
@@ -14,8 +19,17 @@ const upload = multer({
     limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
 });
 
+// Middleware de segurança básica
+app.use((req, res, next) => {
+    res.header('X-Content-Type-Options', 'nosniff');
+    res.header('X-Frame-Options', 'DENY');
+    res.header('X-XSS-Protection', '1; mode=block');
+    next();
+});
+
 app.use(express.static('.'));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Função para calcular entropia de Shannon
 function calculateEntropy(buffer) {
@@ -228,7 +242,9 @@ function generateRecommendations(original, encrypted, comparison) {
     return recommendations;
 }
 
-app.listen(port, () => {
-    console.log(`🚀 Servidor rodando em http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Servidor rodando em http://0.0.0.0:${port}`);
     console.log('📁 Acesse a interface web para analisar arquivos criptografados');
+    console.log(`🌐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`💾 Memória disponível: ${process.env.MEMORY || 'N/A'}MB`);
 });
