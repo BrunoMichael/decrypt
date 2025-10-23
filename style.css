@@ -449,6 +449,150 @@ footer {
     border-radius: 10px;
 }
 
+/* Seção de Descriptografia */
+.decrypt-section {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 15px;
+    padding: 30px;
+    margin: 30px 0;
+    border: 2px solid #0f3460;
+    box-shadow: 0 10px 30px rgba(15, 52, 96, 0.3);
+}
+
+.decrypt-section h2 {
+    color: #00d4ff;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 1.8em;
+}
+
+.decrypt-section p {
+    color: #b8c5d6;
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.decrypt-btn {
+    background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: block;
+    margin: 20px auto;
+    box-shadow: 0 5px 15px rgba(255, 107, 53, 0.3);
+}
+
+.decrypt-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(255, 107, 53, 0.4);
+}
+
+.decrypt-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Resultados da Descriptografia */
+.summary-card {
+    background: #1e1e2e;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 15px 0;
+    border-left: 5px solid #666;
+}
+
+.summary-card.success {
+    border-left-color: #00ff88;
+    background: linear-gradient(135deg, #0d4d2a 0%, #1e1e2e 100%);
+}
+
+.summary-card.failure {
+    border-left-color: #ff4757;
+    background: linear-gradient(135deg, #4d0d1a 0%, #1e1e2e 100%);
+}
+
+.download-btn {
+    background: linear-gradient(135deg, #00ff88 0%, #00d4aa 100%);
+    color: #1a1a2e;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 15px;
+    transition: all 0.3s ease;
+}
+
+.download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 255, 136, 0.3);
+}
+
+/* Lista de Tentativas */
+.attempts-list {
+    margin-top: 15px;
+}
+
+.attempt-item {
+    background: #2a2a3e;
+    border-radius: 8px;
+    margin: 10px 0;
+    padding: 15px;
+    border-left: 4px solid #666;
+}
+
+.attempt-item.success {
+    border-left-color: #00ff88;
+}
+
+.attempt-item.failed {
+    border-left-color: #ff4757;
+}
+
+.attempt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.attempt-number {
+    background: #0f3460;
+    color: #00d4ff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.attempt-method {
+    color: #b8c5d6;
+    font-weight: bold;
+}
+
+.attempt-status {
+    font-size: 1.2em;
+}
+
+.attempt-details {
+    color: #9ca3af;
+    font-size: 0.9em;
+}
+
+.attempt-details p {
+    margin: 5px 0;
+}
+
+.attempt-details .error {
+    color: #ff4757;
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
     .upload-section {

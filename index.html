@@ -24,6 +24,24 @@
                         <small>Qualquer tipo de arquivo</small>
                     </label>
                 </div>
+
+        <div class="info-section">
+            <h2>ℹ️ Informações sobre WantToCry</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>🎯 ID Único Detectado</h3>
+                    <p><code>3C579D75CF2341758A9B984A0B943F18</code></p>
+                </div>
+                <div class="info-card">
+                    <h3>💰 Valor do Resgate</h3>
+                    <p><strong>$600 USD</strong> em Bitcoin</p>
+                </div>
+                <div class="info-card">
+                    <h3>🔐 Algoritmo Suspeito</h3>
+                    <p id="algorithmGuess">AES-CBC com padding PKCS7</p>
+                </div>
+            </div>
+        </div>
                 <div class="file-info" id="originalInfo"></div>
             </div>
 
@@ -85,21 +103,34 @@
             </div>
         </div>
 
-        <div class="info-section">
-            <h2>ℹ️ Informações sobre WantToCry</h2>
-            <div class="info-grid">
-                <div class="info-card">
-                    <h3>🎯 ID Único Detectado</h3>
-                    <p><code>3C579D75CF2341758A9B984A0B943F18</code></p>
-                </div>
-                <div class="info-card">
-                    <h3>💰 Valor do Resgate</h3>
-                    <p><strong>$600 USD</strong> em Bitcoin</p>
-                </div>
-                <div class="info-card">
-                    <h3>🔐 Algoritmo Suspeito</h3>
-                    <p id="algorithmGuess">Analisando...</p>
-                </div>
+        <div class="decrypt-section">
+            <h2>🔓 Sistema de Descriptografia</h2>
+            <p>Faça upload do arquivo criptografado para tentar descriptografá-lo usando os padrões detectados.</p>
+            
+            <div class="upload-area" id="decryptDropZone">
+                <div class="upload-icon">📁</div>
+                <p>Arraste o arquivo criptografado aqui ou clique para selecionar</p>
+                <input type="file" id="encryptedFileInput" accept=".want_to_cry,.*" style="display: none;">
+                <button type="button" onclick="document.getElementById('encryptedFileInput').click()">
+                    Selecionar Arquivo Criptografado
+                </button>
+            </div>
+            
+            <div id="encryptedFileInfo" class="file-info" style="display: none;">
+                <h3>Arquivo Criptografado:</h3>
+                <p><strong>Nome:</strong> <span id="encryptedFileName"></span></p>
+                <p><strong>Tamanho:</strong> <span id="encryptedFileSize"></span></p>
+                <p><strong>Tipo:</strong> <span id="encryptedFileType"></span></p>
+            </div>
+            
+            <button id="decryptBtn" class="decrypt-btn" style="display: none;">
+                🔓 Tentar Descriptografar
+            </button>
+            
+            <div id="decryptResults" class="results" style="display: none;">
+                <h3>🔍 Resultados da Descriptografia</h3>
+                <div id="decryptSummary" class="summary-section"></div>
+                <div id="decryptAttempts" class="attempts-section"></div>
             </div>
         </div>
 

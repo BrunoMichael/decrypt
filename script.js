@@ -2,6 +2,7 @@ class CryptoAnalyzer {
     constructor() {
         this.originalFile = null;
         this.encryptedFile = null;
+        this.encryptedFileForDecrypt = null;
         this.initializeEventListeners();
     }
 
@@ -9,17 +10,24 @@ class CryptoAnalyzer {
         // Upload de arquivos
         const originalInput = document.getElementById('originalFile');
         const encryptedInput = document.getElementById('encryptedFile');
+        const encryptedDecryptInput = document.getElementById('encryptedFileInput');
         const analyzeBtn = document.getElementById('analyzeBtn');
+        const decryptBtn = document.getElementById('decryptBtn');
 
         originalInput.addEventListener('change', (e) => this.handleFileUpload(e, 'original'));
         encryptedInput.addEventListener('change', (e) => this.handleFileUpload(e, 'encrypted'));
+        encryptedDecryptInput.addEventListener('change', (e) => this.handleDecryptFileUpload(e));
         
         // Drag and drop
         this.setupDragAndDrop('originalDrop', originalInput, 'original');
         this.setupDragAndDrop('encryptedDrop', encryptedInput, 'encrypted');
+        this.setupDragAndDrop('decryptDropZone', encryptedDecryptInput, 'decrypt');
 
-        // Botão de análise
+        // Botões
         analyzeBtn.addEventListener('click', () => this.analyzeFiles());
+        if (decryptBtn) {
+            decryptBtn.addEventListener('click', () => this.decryptFile());
+        }
 
         // Tabs do visualizador hex
         document.querySelectorAll('.hex-tab').forEach(tab => {
@@ -29,6 +37,7 @@ class CryptoAnalyzer {
 
     setupDragAndDrop(dropZoneId, input, type) {
         const dropZone = document.getElementById(dropZoneId);
+        if (!dropZone) return;
         
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, (e) => {
@@ -52,9 +61,17 @@ class CryptoAnalyzer {
         dropZone.addEventListener('drop', (e) => {
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                input.files = files;
-                this.handleFileUpload({ target: input }, type);
+                if (type === 'decrypt') {
+                    this.handleDecryptFileUpload({ target: { files: [files[0]] } });
+                } else {
+                    input.files = files;
+                    this.handleFileUpload({ target: { files: [files[0]] } }, type);
+                }
             }
+        });
+
+        dropZone.addEventListener('click', () => {
+            input.click();
         });
     }
 
@@ -76,6 +93,109 @@ class CryptoAnalyzer {
             analyzeBtn.disabled = false;
             analyzeBtn.textContent = '🔍 Analisar Arquivos';
         }
+    }
+
+    handleDecryptFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            this.encryptedFileForDecrypt = file;
+            this.displayDecryptFileInfo(file);
+            document.getElementById('decryptBtn').style.display = 'block';
+        }
+    }
+
+    displayDecryptFileInfo(file) {
+        document.getElementById('encryptedFileName').textContent = file.name;
+        document.getElementById('encryptedFileSize').textContent = this.formatFileSize(file.size);
+        document.getElementById('encryptedFileType').textContent = file.type || 'Desconhecido';
+        document.getElementById('encryptedFileInfo').style.display = 'block';
+    }
+
+    async decryptFile() {
+        if (!this.encryptedFileForDecrypt) {
+            alert('Por favor, selecione um arquivo criptografado primeiro.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('encryptedFile', this.encryptedFileForDecrypt);
+
+        try {
+            document.getElementById('decryptBtn').textContent = '🔄 Descriptografando...';
+            document.getElementById('decryptBtn').disabled = true;
+
+            const response = await fetch('/decrypt', {
+                method: 'POST',
+                body: formData
+            });
+
+            const results = await response.json();
+            this.displayDecryptResults(results);
+
+        } catch (error) {
+            console.error('Erro na descriptografia:', error);
+            alert('Erro ao tentar descriptografar o arquivo.');
+        } finally {
+            document.getElementById('decryptBtn').textContent = '🔓 Tentar Descriptografar';
+            document.getElementById('decryptBtn').disabled = false;
+        }
+    }
+
+    displayDecryptResults(results) {
+        const resultsDiv = document.getElementById('decryptResults');
+        const summaryDiv = document.getElementById('decryptSummary');
+        const attemptsDiv = document.getElementById('decryptAttempts');
+
+        // Resumo
+        summaryDiv.innerHTML = `
+            <div class="summary-card ${results.success ? 'success' : 'failure'}">
+                <h4>${results.success ? '✅ Descriptografia Bem-sucedida!' : '❌ Descriptografia Falhou'}</h4>
+                <p><strong>Tentativas realizadas:</strong> ${results.attempts || 0}</p>
+                ${results.success ? `
+                    <p><strong>Método usado:</strong> ${results.method}</p>
+                    <p><strong>Chave:</strong> ${results.key}</p>
+                    <button onclick="window.open('/download-decrypted', '_blank')" class="download-btn">
+                        📥 Baixar Arquivo Descriptografado
+                    </button>
+                ` : `
+                    <p><strong>Motivo:</strong> Nenhum método de descriptografia foi eficaz</p>
+                `}
+            </div>
+        `;
+
+        // Detalhes das tentativas
+        if (results.attemptDetails && results.attemptDetails.length > 0) {
+            attemptsDiv.innerHTML = `
+                <h4>📋 Detalhes das Tentativas</h4>
+                <div class="attempts-list">
+                    ${results.attemptDetails.map((attempt, index) => `
+                        <div class="attempt-item ${attempt.success ? 'success' : 'failed'}">
+                            <div class="attempt-header">
+                                <span class="attempt-number">#${index + 1}</span>
+                                <span class="attempt-method">${attempt.method}</span>
+                                <span class="attempt-status">${attempt.success ? '✅' : '❌'}</span>
+                            </div>
+                            <div class="attempt-details">
+                                <p><strong>Chave:</strong> ${attempt.key}</p>
+                                ${attempt.preview ? `<p><strong>Preview:</strong> ${attempt.preview}</p>` : ''}
+                                ${attempt.error ? `<p class="error"><strong>Erro:</strong> ${attempt.error}</p>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        resultsDiv.style.display = 'block';
+        resultsDiv.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     displayFileInfo(file, containerId) {
