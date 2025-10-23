@@ -48,6 +48,16 @@ class WebServer {
         });
 
         server.listen(this.port, () => {
+            console.log('🔓 WantToCry Decryptor v1.0.0');
+            console.log('Descriptografador para arquivos infectados pelo ransomware WantToCry');
+            console.log('');
+            
+            // Monitoramento de memória
+            const memUsage = process.memoryUsage();
+            console.log(`💾 Memória: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB usados / ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB total`);
+            console.log(`🔧 Limite máximo: ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
+            console.log('');
+            
             console.log(`🚀 Servidor WantToCry Decryptor iniciado!`);
             console.log(`📱 Interface Web: http://localhost:${this.port}`);
             console.log(`🔓 Descriptografia: http://localhost:${this.port}/decrypt.html`);

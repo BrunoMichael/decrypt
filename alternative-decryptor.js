@@ -117,42 +117,52 @@ class AlternativeDecryptor {
         const buffer = fs.readFileSync(filePath);
         const results = [];
         
-        // Expandir chaves comuns com variações específicas para PDFs
-        const expandedKeys = [
-            ...this.commonKeys,
-            // Chaves específicas para PDFs
-            'PDF',
-            'pdf',
-            '%PDF',
-            'Adobe',
-            'ADOBE',
-            // Chaves específicas do WantToCry
+        // Chaves comuns do WantToCry e variações (reduzidas para economizar memória)
+        const commonKeys = [
             'WantToCry2017',
             'wcry@2ol7',
             'WANACRY',
             'wannacry',
             'WCRY',
             'wcry',
-            // Variações numéricas
+            '2017',
+            'ransom',
+            'bitcoin',
+            'decrypt',
+            'key',
+            'password',
+            // Chaves específicas para PDFs (limitadas)
+            'PDF',
+            'pdf',
+            '%PDF',
+            'Adobe',
+            // Variações numéricas (limitadas)
             '12345',
             '123456',
-            '1234567890',
-            // Chaves baseadas em datas
+            // Chaves baseadas em datas (limitadas)
             '20170512',
-            '2017051',
             '170512'
         ];
         
-        console.log(`🔍 Iniciando força bruta com ${expandedKeys.length} chaves comuns...`);
+        console.log(`🔍 Iniciando força bruta com ${commonKeys.length} chaves comuns (otimizado para memória)...`);
         
-        for (const baseKey of expandedKeys) {
-            // Testar diferentes variações da chave
-            const keyVariations = this.generateKeyVariations(baseKey);
+        for (const baseKey of commonKeys) {
+            // Limitar variações para economizar memória
+            const keyVariations = [
+                baseKey,
+                baseKey.toLowerCase(),
+                baseKey.toUpperCase(),
+                baseKey + '2017'
+            ];
             
             for (const key of keyVariations) {
-                for (const algorithm of ['aes-128-cbc', 'aes-192-cbc', 'aes-256-cbc', 'aes-128-ecb', 'aes-256-ecb']) {
+                for (const algorithm of ['aes-128-cbc', 'aes-256-cbc']) { // Reduzir algoritmos testados
                     try {
-                        const result = await this.tryDecryptWithKey(buffer, key, algorithm);
+                        // Limitar tamanho dos dados processados para evitar LACK_OF_RAM
+                        const maxSize = Math.min(buffer.length, 100000); // Máximo 100KB por tentativa
+                        const limitedBuffer = buffer.slice(0, maxSize);
+                        
+                        const result = await this.tryDecryptWithKey(limitedBuffer, key, algorithm);
                         if (result.success) {
                             results.push({
                                 key: key,
@@ -166,6 +176,13 @@ class AlternativeDecryptor {
                     } catch (error) {
                         // Continuar tentando outras combinações
                     }
+                    
+                    // Forçar garbage collection a cada 5 tentativas
+                    if (results.length % 5 === 0) {
+                        if (global.gc) {
+                            global.gc();
+                        }
+                    }
                 }
             }
         }
@@ -174,47 +191,51 @@ class AlternativeDecryptor {
     }
 
     /**
-     * Gera variações de uma chave base
+     * Gera variações de uma chave base (otimizado para memória)
      */
     generateKeyVariations(baseKey) {
-        const variations = [baseKey];
+        // Reduzir variações para economizar memória
+        const variations = [
+            baseKey,
+            baseKey.toUpperCase(),
+            baseKey.toLowerCase(),
+            baseKey + '2017'
+        ];
         
-        // Adicionar variações comuns
-        variations.push(baseKey.toUpperCase());
-        variations.push(baseKey.toLowerCase());
-        variations.push(baseKey + '123');
-        variations.push(baseKey + '2024');
-        variations.push('123' + baseKey);
-        variations.push(baseKey.split('').reverse().join(''));
-        
-        // Hash variations
-        variations.push(crypto.createHash('md5').update(baseKey).digest('hex').substring(0, 16));
-        variations.push(crypto.createHash('sha1').update(baseKey).digest('hex').substring(0, 16));
-        variations.push(crypto.createHash('sha256').update(baseKey).digest('hex').substring(0, 32));
+        // Apenas hash MD5 para economizar processamento
+        try {
+            variations.push(crypto.createHash('md5').update(baseKey).digest('hex').substring(0, 16));
+        } catch (error) {
+            // Ignorar erro de hash
+        }
         
         return variations;
     }
 
     /**
-     * Tenta descriptografar com uma chave específica
+     * Tenta descriptografar com uma chave específica (otimizado para memória)
      */
     async tryDecryptWithKey(buffer, key, algorithm) {
         try {
             // Preparar chave para o algoritmo
             const keyBuffer = this.prepareKey(key, algorithm);
             
+            // Limitar tamanho dos dados para evitar LACK_OF_RAM
+            const maxDecryptSize = 50000; // 50KB máximo
+            const limitedBuffer = buffer.length > maxDecryptSize ? buffer.slice(0, maxDecryptSize) : buffer;
+            
             // Tentar diferentes posições de IV
             const ivPositions = [
                 { start: 0, length: 16 }, // IV no início
-                { start: buffer.length - 16, length: 16 }, // IV no final
+                { start: limitedBuffer.length - 16, length: 16 }, // IV no final
                 { start: 16, length: 16 } // IV após possível header
             ];
             
             for (const ivPos of ivPositions) {
-                if (ivPos.start + ivPos.length > buffer.length) continue;
+                if (ivPos.start + ivPos.length > limitedBuffer.length) continue;
                 
-                const iv = buffer.slice(ivPos.start, ivPos.start + ivPos.length);
-                const encryptedData = this.extractEncryptedData(buffer, ivPos);
+                const iv = limitedBuffer.slice(ivPos.start, ivPos.start + ivPos.length);
+                const encryptedData = this.extractEncryptedData(limitedBuffer, ivPos);
                 
                 if (algorithm.includes('ecb')) {
                     // ECB não usa IV
