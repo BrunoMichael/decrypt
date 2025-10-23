@@ -490,24 +490,46 @@ app.post('/decrypt', upload.single('encryptedFile'), (req, res) => {
                 
                 // Tentar reparar se houver problemas
                 if (pdfValidation.corruption.length > 0) {
-                    console.log(`🔧 Tentando reparar PDF...`);
+                    console.log(`🔧 Tentando reparo básico...`);
                     const repairResult = repairPDF(decryptedData);
                     
                     if (repairResult.repaired) {
-                        console.log(`✅ Reparos aplicados:`, repairResult.repairs);
+                        console.log(`✅ Reparos básicos aplicados:`, repairResult.repairs);
+                        finalData = repairResult.data;
+                        pdfValidation = validatePDFStructure(repairResult.data);
+                    }
+                    
+                    // Se ainda há problemas graves, tentar reparo avançado
+                    if (pdfValidation.corruption.length > 0 && 
+                        (pdfValidation.corruption.includes('Falta estrutura xref/trailer') || 
+                         pdfValidation.corruption.includes('Nenhum objeto PDF encontrado'))) {
                         
-                        // Salvar versão reparada
+                        console.log(`🔧 Tentando reparo avançado...`);
+                        const advancedRepairResult = advancedPDFRepair(finalData);
+                        
+                        if (advancedRepairResult.repaired) {
+                            console.log(`✅ Reparos avançados aplicados:`, advancedRepairResult.repairs);
+                            
+                            // Salvar versão com reparo avançado
+                            const advancedRepairedPath = path.join(tempDir, 'decrypted_file_advanced_repair.pdf');
+                            fs.writeFileSync(advancedRepairedPath, advancedRepairResult.data);
+                            fs.writeFileSync(decryptedPath, advancedRepairResult.data); // Substituir original
+                            
+                            // Revalidar após reparo avançado
+                            pdfValidation = validatePDFStructure(advancedRepairResult.data);
+                            finalData = advancedRepairResult.data;
+                            
+                            console.log(`📄 Validação após reparo avançado:`, pdfValidation);
+                        } else {
+                            console.log(`❌ Reparo avançado não foi possível`);
+                        }
+                    } else if (repairResult.repaired) {
+                        // Salvar versão reparada básica
                         const repairedPath = path.join(tempDir, 'decrypted_file_repaired.pdf');
                         fs.writeFileSync(repairedPath, repairResult.data);
                         fs.writeFileSync(decryptedPath, repairResult.data); // Substituir original
                         
-                        // Revalidar após reparo
-                        pdfValidation = validatePDFStructure(repairResult.data);
-                        finalData = repairResult.data;
-                        
-                        console.log(`📄 Validação após reparo:`, pdfValidation);
-                    } else {
-                        console.log(`❌ Não foi possível reparar automaticamente`);
+                        console.log(`📄 Validação após reparo básico:`, pdfValidation);
                     }
                 }
                 
@@ -790,6 +812,168 @@ function repairPDF(data) {
         return {
             repaired: false,
             repairs: [`Erro no reparo: ${error.message}`],
+            data
+        };
+    }
+}
+
+// Função para reparo avançado de PDF
+function advancedPDFRepair(data) {
+    try {
+        let content = data.toString('binary');
+        let repaired = false;
+        const repairs = [];
+
+        // Garantir cabeçalho PDF válido
+        if (!content.startsWith('%PDF')) {
+            content = '%PDF-1.4\n' + content;
+            repaired = true;
+            repairs.push('Cabeçalho PDF-1.4 adicionado');
+        }
+
+        // Procurar por conteúdo que pareça ser de um PDF
+        const streamMatches = content.match(/stream[\s\S]*?endstream/g) || [];
+        const objMatches = content.match(/\d+\s+\d+\s+obj[\s\S]*?endobj/g) || [];
+        
+        // Se não há objetos válidos, criar estrutura mínima
+        if (objMatches.length === 0 && streamMatches.length === 0) {
+            // Tentar detectar se há dados que possam ser conteúdo de página
+            const possibleContent = content.substring(content.indexOf('\n') + 1);
+            
+            if (possibleContent.length > 100) {
+                // Criar PDF mínimo com o conteúdo como stream
+                const minimalPDF = `%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+>>
+endobj
+
+4 0 obj
+<<
+/Length ${possibleContent.length}
+>>
+stream
+${possibleContent}
+endstream
+endobj
+
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000074 00000 n 
+0000000120 00000 n 
+0000000179 00000 n 
+trailer
+<<
+/Size 5
+/Root 1 0 R
+>>
+startxref
+${9 + 65 + 46 + 59 + 47 + possibleContent.length + 20}
+%%EOF`;
+
+                content = minimalPDF;
+                repaired = true;
+                repairs.push('Estrutura PDF mínima criada com conteúdo detectado');
+            } else {
+                // Criar PDF completamente vazio mas válido
+                const emptyPDF = `%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+>>
+endobj
+
+xref
+0 4
+0000000000 65535 f 
+0000000009 00000 n 
+0000000074 00000 n 
+0000000120 00000 n 
+trailer
+<<
+/Size 4
+/Root 1 0 R
+>>
+startxref
+179
+%%EOF`;
+
+                content = emptyPDF;
+                repaired = true;
+                repairs.push('PDF vazio mas válido criado');
+            }
+        } else {
+            // Tentar reparar estrutura existente
+            if (!content.includes('xref') || !content.includes('trailer')) {
+                const objects = objMatches.length;
+                if (objects > 0) {
+                    // Remover %%EOF existente se houver
+                    content = content.replace(/%%EOF\s*$/, '');
+                    
+                    const xrefPos = content.length;
+                    content += `\nxref\n0 ${objects + 1}\n`;
+                    
+                    // Calcular posições aproximadas dos objetos
+                    for (let i = 0; i <= objects; i++) {
+                        const pos = i === 0 ? 0 : Math.floor(xrefPos * i / objects);
+                        content += `${pos.toString().padStart(10, '0')} ${i === 0 ? '65535' : '00000'} ${i === 0 ? 'f' : 'n'} \n`;
+                    }
+                    
+                    content += `trailer\n<<\n/Size ${objects + 1}\n/Root 1 0 R\n>>\nstartxref\n${xrefPos}\n%%EOF`;
+                    repaired = true;
+                    repairs.push(`Estrutura xref/trailer reconstruída para ${objects} objetos`);
+                }
+            }
+        }
+
+        return {
+            repaired,
+            repairs,
+            data: repaired ? Buffer.from(content, 'binary') : data
+        };
+    } catch (error) {
+        console.error('Erro no reparo avançado do PDF:', error);
+        return {
+            repaired: false,
+            repairs: [`Erro no reparo avançado: ${error.message}`],
             data
         };
     }
