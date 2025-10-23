@@ -201,7 +201,7 @@ class WebServer {
                                     const stats = fs.statSync(outputPath);
                                     console.log(`✅ Arquivo descriptografado salvo: ${outputPath} (${stats.size} bytes)`);
                                     
-                                    return res.json({
+                                    return this.sendJSON(res, 200, {
                                         success: true,
                                         message: 'Arquivo descriptografado com sucesso usando MicroDecryptor!',
                                         downloadUrl: `/download/${path.basename(outputPath)}`,
