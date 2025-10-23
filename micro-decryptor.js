@@ -244,18 +244,23 @@ class MicroDecryptor {
             // DEBUG: Log dos caminhos
             console.log(`🔍 [DEBUG] filePath recebido: ${filePath}`);
             console.log(`🔍 [DEBUG] originalName extraído: ${originalName}`);
+            console.log(`🔍 [DEBUG] __filename: ${__filename}`);
+            console.log(`🔍 [DEBUG] __dirname: ${__dirname}`);
+            console.log(`🔍 [DEBUG] process.cwd(): ${process.cwd()}`);
             
-            // CORREÇÃO: Usar __dirname para garantir caminho correto no Windows
-            const serverRoot = path.dirname(__filename); // c:\server\www\decrpt
+            // CORREÇÃO DEFINITIVA: Usar process.cwd() que é o diretório de trabalho atual
+            const serverRoot = process.cwd(); // Diretório onde o servidor está rodando
             const outputDir = path.join(serverRoot, 'decrypted');
             
-            console.log(`🔍 [DEBUG] serverRoot: ${serverRoot}`);
-            console.log(`🔍 [DEBUG] outputDir corrigido: ${outputDir}`);
+            console.log(`🔍 [DEBUG] serverRoot (process.cwd): ${serverRoot}`);
+            console.log(`🔍 [DEBUG] outputDir final: ${outputDir}`);
             
             // Garantir que o diretório de saída existe
             if (!fs.existsSync(outputDir)) {
                 fs.mkdirSync(outputDir, { recursive: true });
                 console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
+            } else {
+                console.log(`📁 [DEBUG] Diretório já existe: ${outputDir}`);
             }
             
             const outputFileName = `micro_decrypted_${Date.now()}_${originalName}`;
