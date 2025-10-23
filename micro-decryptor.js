@@ -238,21 +238,19 @@ class MicroDecryptor {
             
             const inputFd = fs.openSync(filePath, 'r');
             
-            // Criar nome de arquivo de saída mais específico - usar caminhos relativos
+            // Criar nome de arquivo de saída - FORÇAR uso dos diretórios corretos do servidor
             const originalName = path.basename(filePath).replace('.want_to_cry', '');
             
             // DEBUG: Log dos caminhos
-            console.log(`🔍 [DEBUG] filePath: ${filePath}`);
-            console.log(`🔍 [DEBUG] path.dirname(filePath): ${path.dirname(filePath)}`);
-            console.log(`🔍 [DEBUG] includes uploads: ${path.dirname(filePath).includes('uploads')}`);
+            console.log(`🔍 [DEBUG] filePath recebido: ${filePath}`);
+            console.log(`🔍 [DEBUG] originalName extraído: ${originalName}`);
             
-            const projectRoot = path.dirname(filePath).includes('uploads') 
-                ? path.dirname(path.dirname(filePath)) 
-                : path.dirname(filePath);
-            const outputDir = path.join(projectRoot, 'decrypted');
+            // CORREÇÃO: Usar __dirname para garantir caminho correto no Windows
+            const serverRoot = path.dirname(__filename); // c:\server\www\decrpt
+            const outputDir = path.join(serverRoot, 'decrypted');
             
-            console.log(`🔍 [DEBUG] projectRoot: ${projectRoot}`);
-            console.log(`🔍 [DEBUG] outputDir: ${outputDir}`);
+            console.log(`🔍 [DEBUG] serverRoot: ${serverRoot}`);
+            console.log(`🔍 [DEBUG] outputDir corrigido: ${outputDir}`);
             
             // Garantir que o diretório de saída existe
             if (!fs.existsSync(outputDir)) {
@@ -260,8 +258,10 @@ class MicroDecryptor {
                 console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
             }
             
-            const outputPath = path.join(outputDir, `micro_decrypted_${Date.now()}_${originalName}`);
+            const outputFileName = `micro_decrypted_${Date.now()}_${originalName}`;
+            const outputPath = path.join(outputDir, outputFileName);
             console.log(`🔍 [DEBUG] outputPath final: ${outputPath}`);
+            console.log(`🔍 [DEBUG] outputFileName: ${outputFileName}`);
             const outputFd = fs.openSync(outputPath, 'w');
             
             // Ler IV dos primeiros 16 bytes
@@ -336,7 +336,12 @@ class MicroDecryptor {
                 return null;
             }
             
-            return outputPath;
+            // Retornar objeto com caminho completo e nome do arquivo
+            return {
+                fullPath: outputPath,
+                fileName: outputFileName,
+                size: finalStats.size
+            };
             
         } catch (error) {
             console.error('❌ [MICRO] Erro no processamento completo:', error.message);

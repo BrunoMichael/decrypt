@@ -195,18 +195,17 @@ class WebServer {
                                 
                                 // Processar arquivo completo com a chave encontrada
                                 const validKey = microResults[0].key;
-                                const outputPath = await this.microDecryptor.processFullFile(file.path, validKey);
+                                const result = await this.microDecryptor.processFullFile(file.path, validKey);
                                 
-                                if (outputPath && fs.existsSync(outputPath)) {
-                                    const stats = fs.statSync(outputPath);
-                                    console.log(`✅ Arquivo descriptografado salvo: ${outputPath} (${stats.size} bytes)`);
+                                if (result && result.fullPath && fs.existsSync(result.fullPath)) {
+                                    console.log(`✅ Arquivo descriptografado salvo: ${result.fullPath} (${result.size} bytes)`);
                                     
                                     return this.sendJSON(res, 200, {
                                         success: true,
                                         message: 'Arquivo descriptografado com sucesso usando MicroDecryptor!',
-                                        downloadUrl: `/download/${path.basename(outputPath)}`,
+                                        downloadUrl: `/download/${result.fileName}`,
                                         originalSize: file.size,
-                                        decryptedSize: stats.size,
+                                        decryptedSize: result.size,
                                         method: 'MicroDecryptor',
                                         key: validKey
                                     });
