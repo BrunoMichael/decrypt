@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { FileText, AlertTriangle, Shield, Download, CheckCircle, XCircle, Info, Unlock, Key } from 'lucide-react';
 import { WannaCryDecryptor, DecryptionResult } from '../utils/decryption';
+import { WantToCryFileSimulator } from '../utils/fileSimulator';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -16,6 +17,8 @@ interface AnalysisResult {
   analysisDate: string;
   decryptionResult?: DecryptionResult;
   decryptedFile?: Uint8Array;
+  wantToCryDetection?: any;
+  wantToCryAnalysis?: any;
 }
 
 interface FileAnalyzerProps {
@@ -24,34 +27,84 @@ interface FileAnalyzerProps {
 }
 
 export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzerProps) {
-  const [analyzing, setAnalyzing] = useState(false);
-  const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
   const [currentFile, setCurrentFile] = useState<string>('');
   const [progress, setProgress] = useState(0);
-  const [decrypting, setDecrypting] = useState(false);
+
+  // Função para calcular entropia
+  const calculateEntropy = (data: Uint8Array): number => {
+    const frequency: { [key: number]: number } = {};
+    
+    for (let i = 0; i < data.length; i++) {
+      frequency[data[i]] = (frequency[data[i]] || 0) + 1;
+    }
+    
+    let entropy = 0;
+    const length = data.length;
+    
+    for (const count of Object.values(frequency)) {
+      const probability = count / length;
+      entropy -= probability * Math.log2(probability);
+    }
+    
+    return entropy;
+  };
+
+  // Função para determinar tipo de arquivo
+  const getFileType = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const mimeTypes: { [key: string]: string } = {
+      'pdf': 'application/pdf',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'mp3': 'audio/mpeg',
+      'mp4': 'video/mp4',
+      'txt': 'text/plain',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    };
+    return mimeTypes[extension || ''] || 'application/octet-stream';
+  };
 
   const analyzeAndDecryptFile = useCallback(async (file: File): Promise<AnalysisResult> => {
     const fileData = new Uint8Array(await file.arrayBuffer());
     
     // Análise básica
     const entropy = calculateEntropy(fileData);
-    const isEncrypted = entropy > 7.5 || isWannaCryFile(file.name, fileData);
-    const ransomwareType = detectRansomwareType(file.name, fileData);
+    const isEncrypted = entropy > 7.5 || file.name.includes('.wncry') || file.name.includes('.wcry');
+    
+    // Detectar variante WantToCry
+    const wantToCryDetection = WannaCryDecryptor.detectWantToCryVariant(fileData);
+    
+    // Análise específica do WantToCry se detectado
+    let wantToCryAnalysis = null;
+    if (wantToCryDetection.isWantToCry) {
+      wantToCryAnalysis = WannaCryDecryptor.analyzeWantToCryFile(fileData, file.name);
+    }
     
     let result: AnalysisResult = {
       fileName: file.name,
       fileSize: file.size,
       isEncrypted,
-      ransomwareType,
+      ransomwareType: wantToCryDetection.isWantToCry ? 'WantToCry' : (isEncrypted ? 'WannaCry (genérico)' : 'Não detectado'),
       entropy,
-      originalExtension: extractOriginalExtension(file.name),
-      recoveryMethods: getRecoveryMethods(ransomwareType),
-      riskLevel: entropy > 7.8 ? 'high' : entropy > 7.0 ? 'medium' : 'low',
+      originalExtension: file.name.split('.').pop() || '',
+      recoveryMethods: isEncrypted ? [
+        'Descriptografia automática',
+        'Chaves conhecidas',
+        'Análise de memória',
+        'Força bruta'
+      ] : ['Arquivo não criptografado'],
+      riskLevel: isEncrypted ? 'high' : 'low',
       analysisDate: new Date().toISOString(),
+      wantToCryDetection,
+      wantToCryAnalysis
     };
 
-    // Tentar descriptografia se for WannaCry
-    if (isEncrypted && ransomwareType === 'WannaCry') {
+    // Tentar descriptografia se for criptografado
+    if (isEncrypted) {
       try {
         const decryptionResult = await WannaCryDecryptor.decryptFile(fileData, file.name);
         result.decryptionResult = decryptionResult;
@@ -70,14 +123,13 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
     }
 
     return result;
-  }, []);
+  }, [calculateEntropy]);
 
   const startAnalysis = useCallback(async () => {
     if (files.length === 0) return;
 
-    setAnalyzing(true);
-    setDecrypting(true);
-    setResults([]);
+    setIsAnalyzing(true);
+    setAnalysisResults([]);
     setProgress(0);
 
     const analysisResults: AnalysisResult[] = [];
@@ -110,12 +162,74 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
       setProgress(((i + 1) / files.length) * 100);
     }
 
-    setResults(analysisResults);
-    setAnalyzing(false);
-    setDecrypting(false);
+    setAnalysisResults(analysisResults);
+    setIsAnalyzing(false);
     setCurrentFile('');
     onAnalysisComplete(analysisResults);
   }, [files, analyzeAndDecryptFile, onAnalysisComplete]);
+
+  // Função para criar arquivos de teste
+  const createTestFiles = useCallback(async () => {
+    const testFileSet = WantToCryFileSimulator.createTestFileSet();
+    
+    setIsAnalyzing(true);
+    setAnalysisResults([]);
+
+    const results: AnalysisResult[] = [];
+
+    for (const fileData of testFileSet.files) {
+      // Análise básica do arquivo
+      const entropy = calculateEntropy(fileData.encryptedData);
+      const isEncrypted = true; // Arquivos de teste são sempre criptografados
+      
+      // Detectar variante WantToCry
+      const wantToCryDetection = WannaCryDecryptor.detectWantToCryVariant(fileData.encryptedData);
+      
+      // Análise específica do WantToCry
+      const wantToCryAnalysis = WannaCryDecryptor.analyzeWantToCryFile(fileData.encryptedData, fileData.name);
+
+      let decryptionResult: DecryptionResult | null = null;
+      let decryptedFileData: Uint8Array | null = null;
+
+      // Tentar descriptografia automática
+      try {
+        decryptionResult = await WannaCryDecryptor.decryptFile(fileData.encryptedData, fileData.name);
+        
+        if (decryptionResult.success && decryptionResult.decryptedData) {
+          decryptedFileData = decryptionResult.decryptedData;
+        }
+      } catch (error) {
+        console.error('Erro na descriptografia:', error);
+      }
+
+      const result: AnalysisResult = {
+        fileName: fileData.name,
+        fileSize: fileData.encryptedData.length,
+        entropy: entropy,
+        isEncrypted: isEncrypted,
+        ransomwareType: 'WantToCry (Simulado)',
+        riskLevel: 'high',
+        originalExtension: fileData.name.split('.').pop() || '',
+        recoveryMethods: [
+          'Descriptografia automática',
+          'Chaves conhecidas do caso real',
+          'Análise de ID da vítima',
+          'Força bruta baseada em padrões'
+        ],
+        analysisDate: new Date().toISOString(),
+        decryptionResult: decryptionResult || undefined,
+        decryptedFile: decryptedFileData || undefined,
+        wantToCryDetection,
+        wantToCryAnalysis
+      };
+
+      results.push(result);
+    }
+
+    setAnalysisResults(results);
+    setIsAnalyzing(false);
+    onAnalysisComplete(results);
+  }, [calculateEntropy, onAnalysisComplete]);
 
   const downloadDecryptedFile = (result: AnalysisResult) => {
     if (result.decryptedFile) {
@@ -129,7 +243,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
   };
 
   const downloadAllDecrypted = async () => {
-    const decryptedFiles = results.filter(r => r.decryptedFile);
+    const decryptedFiles = analysisResults.filter(r => r.decryptedFile);
     if (decryptedFiles.length === 0) {
       alert('Nenhum arquivo descriptografado disponível para download.');
       return;
@@ -163,7 +277,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
   };
 
   const downloadDecryptedFiles = async () => {
-    const decryptedFiles = results.filter(r => r.decryptedFile);
+    const decryptedFiles = analysisResults.filter(r => r.decryptedFile);
     
     if (decryptedFiles.length === 0) {
       alert('Nenhum arquivo foi descriptografado com sucesso.');
@@ -198,15 +312,15 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
   const exportReport = () => {
     const report = {
       timestamp: new Date().toISOString(),
-      totalFiles: results.length,
-      encryptedFiles: results.filter(r => r.isEncrypted).length,
-      decryptedFiles: results.filter(r => r.decryptionResult?.success).length,
-      results: results.map(r => ({
+      totalFiles: analysisResults.length,
+      encryptedFiles: analysisResults.filter(r => r.isEncrypted).length,
+      decryptedFiles: analysisResults.filter(r => r.decryptionResult?.success).length,
+      results: analysisResults.map(r => ({
         ...r,
         decryptedFile: undefined // Não incluir dados binários no relatório
       })),
       decryptionReport: WannaCryDecryptor.generateDecryptionReport(
-        results.map(r => r.decryptionResult).filter(Boolean) as DecryptionResult[]
+        analysisResults.map(r => r.decryptionResult).filter(Boolean) as DecryptionResult[]
       )
     };
 
@@ -273,24 +387,6 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
     return methods;
   };
 
-  const calculateEntropy = (data: Uint8Array): number => {
-    const frequency: { [key: number]: number } = {};
-    
-    for (let i = 0; i < data.length; i++) {
-      frequency[data[i]] = (frequency[data[i]] || 0) + 1;
-    }
-
-    let entropy = 0;
-    const length = data.length;
-
-    for (const count of Object.values(frequency)) {
-      const probability = count / length;
-      entropy -= probability * Math.log2(probability);
-    }
-
-    return entropy;
-  };
-
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -314,7 +410,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
           autoDownloadDecrypted(result);
         }
         
-        setResults(newResults);
+        setAnalysisResults(newResults);
         onAnalysisComplete?.(newResults);
       };
       
@@ -326,7 +422,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
 
   return (
     <div className="w-full">
-      {analyzing && (
+      {isAnalyzing && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center space-x-3">
             <div className="animate-spin">
@@ -334,7 +430,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
             </div>
             <div className="flex-1">
               <p className="font-medium text-blue-800">
-                {decrypting ? 'Analisando e descriptografando arquivos...' : 'Analisando arquivos...'}
+                {isAnalyzing ? 'Analisando e descriptografando arquivos...' : 'Analisando arquivos...'}
               </p>
               {currentFile && (
                 <p className="text-sm text-blue-600">Processando: {currentFile}</p>
@@ -351,21 +447,21 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
         </div>
       )}
 
-      {results.length > 0 && (
+      {analysisResults.length > 0 && (
         <div className="space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h3 className="text-xl font-semibold text-gray-800">
-                Relatório de Análise ({results.length} arquivos)
+                Relatório de Análise ({analysisResults.length} arquivos)
               </h3>
               <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
                 <span className="flex items-center space-x-1">
                   <AlertTriangle className="w-4 h-4 text-red-500" />
-                  <span>{results.filter(r => r.isEncrypted).length} criptografados</span>
+                  <span>{analysisResults.filter(r => r.isEncrypted).length} criptografados</span>
                 </span>
                 <span className="flex items-center space-x-1">
                   <CheckCircle className="w-4 h-4 text-green-500" />
-                  <span>{results.filter(r => r.decryptionResult?.success).length} descriptografados</span>
+                  <span>{analysisResults.filter(r => r.decryptionResult?.success).length} descriptografados</span>
                 </span>
               </div>
             </div>
@@ -379,7 +475,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
                 <span>Exportar Relatório</span>
               </button>
               
-              {results.some(r => r.decryptedFile) && (
+              {analysisResults.some(r => r.decryptedFile) && (
                 <button
                   onClick={downloadAllDecrypted}
                   className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
@@ -392,7 +488,7 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
           </div>
 
           <div className="grid gap-4">
-            {results.map((result, index) => (
+            {analysisResults.map((result, index) => (
               <div key={index} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
@@ -476,6 +572,51 @@ export default function FileAnalyzer({ files, onAnalysisComplete }: FileAnalyzer
                       </span>
                     )}
                   </div>
+
+                  {/* Informações específicas do WantToCry */}
+                  {result.wantToCryDetection && result.wantToCryDetection.isWantToCry && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <h5 className="font-medium text-yellow-800 mb-2">Detecção WantToCry:</h5>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-yellow-700">Confiança:</span>
+                          <span className="font-medium text-yellow-800">{result.wantToCryDetection.confidence}%</span>
+                        </div>
+                        <div>
+                          <span className="text-yellow-700">Indicadores:</span>
+                          <ul className="mt-1 space-y-1">
+                            {result.wantToCryDetection.indicators.map((indicator: string, idx: number) => (
+                              <li key={idx} className="text-yellow-600 flex items-start space-x-2">
+                                <span className="w-1 h-1 bg-yellow-400 rounded-full mt-2 flex-shrink-0"></span>
+                                <span>{indicator}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Análise específica do WantToCry */}
+                  {result.wantToCryAnalysis && result.wantToCryAnalysis.isWantToCry && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <h5 className="font-medium text-blue-800 mb-2">Análise WantToCry:</h5>
+                      <div className="space-y-1 text-sm">
+                        {result.wantToCryAnalysis.victimId && (
+                          <div className="flex justify-between">
+                            <span className="text-blue-700">ID da Vítima:</span>
+                            <span className="font-mono text-blue-800">{result.wantToCryAnalysis.victimId}</span>
+                          </div>
+                        )}
+                        {result.wantToCryAnalysis.encryptionMethod && (
+                          <div className="flex justify-between">
+                            <span className="text-blue-700">Método de Criptografia:</span>
+                            <span className="text-blue-800">{result.wantToCryAnalysis.encryptionMethod}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <h5 className="font-medium text-gray-700 mb-2">Métodos de Recuperação:</h5>
