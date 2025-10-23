@@ -171,27 +171,25 @@ class WebServer {
                                     totalAttempts: alternativeResult.totalAttempts
                                 });
                             } else {
-                                // Limpar arquivo temporário
-                                fs.unlinkSync(file.path);
-                                
                                 console.log(`❌ Falha na descriptografia: ${result.error}`);
 
                                 this.sendJSON(res, 400, {
                                     success: false,
                                     error: result.error || 'Não foi possível descriptografar o arquivo',
                                     headerAnalysis: alternativeResult.headerAnalysis,
-                                    totalAttempts: alternativeResult.totalAttempts
+                                    totalAttempts: alternativeResult.totalAttempts,
+                                    originalFile: file.originalname,
+                                    keepFile: true
                                 });
                             }
                         } catch (altError) {
-                            // Limpar arquivo temporário
-                            fs.unlinkSync(file.path);
-                            
                             console.log(`❌ Falha na descriptografia alternativa: ${altError.message}`);
 
                             this.sendJSON(res, 400, {
                                 success: false,
-                                error: result.error || 'Não foi possível descriptografar o arquivo'
+                                error: `Erro na descriptografia alternativa: ${altError.message}`,
+                                originalFile: file.originalname,
+                                keepFile: true
                             });
                         }
                     }
@@ -217,9 +215,17 @@ class WebServer {
 
     async handleDownloadRequest(req, res, pathname) {
         const filename = pathname.replace('/download/', '');
-        const filePath = path.join(this.outputDir, filename);
+        
+        // Verificar se é um arquivo descriptografado
+        let filePath = path.join(this.outputDir, filename);
+        
+        // Se não encontrar no diretório de saída, verificar no diretório de uploads
+        if (!fs.existsSync(filePath)) {
+            filePath = path.join(this.uploadsDir, filename);
+        }
 
         if (!fs.existsSync(filePath)) {
+            console.log(`❌ Arquivo não encontrado: ${filename}`);
             this.send404(res, pathname);
             return;
         }
@@ -238,7 +244,7 @@ class WebServer {
         const readStream = fs.createReadStream(filePath);
         readStream.pipe(res);
 
-        console.log(`📥 Download iniciado: ${filename}`);
+        console.log(`📥 Download iniciado: ${filename} (${filePath})`);
     }
 
     async handleStaticRequest(req, res, pathname) {

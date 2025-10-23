@@ -204,6 +204,7 @@ class DecryptClient {
                             <li>Tente diferentes valores para Tox ID e Victim ID</li>
                             <li>Certifique-se de que o arquivo não está corrompido</li>
                             <li>O sistema tentou métodos alternativos automaticamente</li>
+                            ${result.originalFile ? `<li><strong>Arquivo original disponível:</strong> <a href="/download/${result.originalFile}" download="${result.originalFile}">Baixar arquivo original</a></li>` : ''}
                         </ul>
                     </div>
                 </div>
